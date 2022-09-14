@@ -39,7 +39,7 @@ class DCMCDataset(Dataset):
 
 
 class DCMCDataModule(pl.LightningDataModule):
-    def __init__(self, image_dir, batch_size, patch_size=(256, 512)):
+    def __init__(self, image_dir, batch_size, patch_size):
         super().__init__()
 
         self.image_dir = image_dir
@@ -68,8 +68,8 @@ class DCMCDataModule(pl.LightningDataModule):
             ], p=36 / 37)
 
             train_transforms = A.Compose([
-                A.SmallestMaxSize(max(self.patch_size)),
-                A.RandomCrop(*self.patch_size),
+                A.RandomCrop(self.patch_size[0] * 2, self.patch_size[1] * 2),
+                A.Resize(*self.patch_size),
                 A.ToFloat(),
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
@@ -77,8 +77,8 @@ class DCMCDataModule(pl.LightningDataModule):
             self.train = DCMCDataset(self.image_dir / "Train", train_transforms, distortions)
 
             val_transforms = A.Compose([
-                A.SmallestMaxSize(max(self.patch_size)),
-                A.CenterCrop(*self.patch_size),
+                A.RandomCrop(self.patch_size[0] * 2, self.patch_size[1] * 2),
+                A.Resize(*self.patch_size),
                 A.ToFloat(),
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
@@ -106,6 +106,6 @@ class DCMCDataModule(pl.LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = DCMCDataModule(Path("../../datasets/dataset"), batch_size=1)
+    datamodule = DCMCDataModule(Path("../../datasets/dataset"), batch_size=1, patch_size=(96, 192))
     datamodule.setup()
     datamodule.plot_example()
