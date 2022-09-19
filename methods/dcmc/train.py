@@ -27,8 +27,9 @@ wandb_logger = WandbLogger(project="dcmc", log_model="all")
 wandb_logger.watch(model, log="all")
 
 checkpoint = pl.callbacks.ModelCheckpoint(
-    monitor="Photometric Loss",
-    save_last=True)
+    monitor="Loss",
+    every_n_epochs=5,
+    save_top_k=-1)
 
 trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint], logger=wandb_logger)
 trainer.fit(model, datamodule)

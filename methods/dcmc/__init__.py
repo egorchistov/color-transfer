@@ -14,16 +14,21 @@ python -m methods.dcmc.train \
 ```
 
 We use Tesla P100-16GB in our expreriments.
-In this implementation we do not use 0.005 coefficient with PAM losses.
-Also, we do not use horizontal and vertical flips as augmentation.
+In this implementation we do not use horizontal and vertical flips as augmentation.
+
+See https://wandb.ai/egorchistov/dcmc for training logs and artifacts.
 
 Links
 -----
 https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 """
 
+from pathlib import Path
+
+import wandb
 import torch
 import pytorch_lightning as pl
+from kornia import image_to_tensor, tensor_to_image
 from torch import nn
 from kornia.metrics import psnr, ssim
 from kornia.losses import ssim_loss
@@ -51,7 +56,19 @@ def deep_color_mismatch_correction(target, reference):
     }
     """
 
-    return target
+    run = wandb.init()
+    artifact = run.use_artifact("egorchistov/dcmc/model-3e2qi9lr:v100", type="model")
+    artifact_dir = artifact.download()
+    model = DCMC.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
+
+    target = image_to_tensor(target, keepdim=False).float()
+    reference = image_to_tensor(reference, keepdim=False).float()
+
+    model.eval()
+    with torch.no_grad():
+        corrected_left, _ = model(target, reference)
+
+    return tensor_to_image(corrected_left)
 
 
 class DCMC(pl.LightningModule):
@@ -94,20 +111,22 @@ class DCMC(pl.LightningModule):
         loss_color_correction = F.l1_loss(corrected_left, left_gt) + \
             F.mse_loss(corrected_left, left_gt) + \
             ssim_loss(corrected_left, left_gt, window_size=11)
+        loss = loss_color_correction + 0.005 * (loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C)
 
-        self.log("Photometric Loss", loss_PAM_P + loss_P)
-        self.log("Smoothness Loss", 0.1 * loss_S + loss_PAM_S)
-        self.log("Cycle Loss", loss_PAM_C)
+        self.log("Photometric Loss", 0.005 * (loss_PAM_P + loss_P))
+        self.log("Smoothness Loss",  0.005 * (0.1 * loss_S + loss_PAM_S))
+        self.log("Cycle Loss",  0.005 * loss_PAM_C)
         self.log("Color Correction Loss", loss_color_correction)
+        self.log("Loss", loss)
 
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
                 key="Train",
-                images=[left, warp_disp(right, -disp), corrected_left, left_gt, right, disp, valid_mask[0]],
+                images=[left, warp_disp(right, -disp), corrected_left.clamp(0, 1), left_gt, right, disp, valid_mask[0]],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
                          "Valid Mask"])
 
-        return loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
+        return loss
 
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
@@ -115,19 +134,15 @@ class DCMC(pl.LightningModule):
         corrected_left, (disp, _, _, valid_mask) = self(left, right)
 
         psnr_value = psnr(corrected_left, left_gt, max_val=1)
-        occlusion_mask = 1 - valid_mask[0]
-        psnr_occlusions_value = psnr(corrected_left * occlusion_mask, left_gt * occlusion_mask, max_val=1) + \
-            10 * torch.log10(occlusion_mask.mean())
         ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()
 
         self.log("PSNR", psnr_value)
-        self.log("PSNR (Occlusions)", psnr_occlusions_value)
         self.log("SSIM", ssim_value)
 
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
                 key="Validation",
-                images=[left, warp_disp(right, -disp), corrected_left, left_gt, right, disp, valid_mask[0]],
+                images=[left, warp_disp(right, -disp), corrected_left.clamp(0, 1), left_gt, right, disp, valid_mask[0]],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
                          "Valid Mask"])
 
