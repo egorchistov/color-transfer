@@ -17,13 +17,19 @@ We use Tesla P100-16GB in our expreriments.
 In this implementation we do not use 0.005 coefficient with PAM losses.
 Also, we do not use horizontal and vertical flips as augmentation.
 
+See https://wandb.ai/egorchistov/dcmc for training logs and artifacts.
+
 Links
 -----
 https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 """
 
+from pathlib import Path
+
+import wandb
 import torch
 import pytorch_lightning as pl
+from kornia import image_to_tensor, tensor_to_image
 from torch import nn
 from kornia.metrics import psnr, ssim
 from kornia.losses import ssim_loss
@@ -51,7 +57,19 @@ def deep_color_mismatch_correction(target, reference):
     }
     """
 
-    return target
+    run = wandb.init()
+    artifact = run.use_artifact("egorchistov/dcmc/model-3e2qi9lr:v100", type="model")
+    artifact_dir = artifact.download()
+    model = DCMC.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
+
+    target = image_to_tensor(target, keepdim=False).float()
+    reference = image_to_tensor(reference, keepdim=False).float()
+
+    model.eval()
+    with torch.no_grad():
+        corrected_left, _ = model(target, reference)
+
+    return tensor_to_image(corrected_left)
 
 
 class DCMC(pl.LightningModule):

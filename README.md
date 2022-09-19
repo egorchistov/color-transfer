@@ -9,7 +9,7 @@ and also my pet project which maybe will be updated
 2. [x] Xiao et al., "Color Transfer in Correlated Color Space", 2006
 3. [x] Pitie et al., "The Linear Monge-Kantorovitch Linear Colour Mapping for Example-Based Colour Transfer", 2007
 4. [x] Pitie et al., "Automated Colour Grading using Colour Distribution Transfer", 2007
-5. [ ] Croci et al., "Deep Color Mismatch Correction in Stereoscopic 3D Images", 2021
+5. [x] Croci et al., "Deep Color Mismatch Correction in Stereoscopic 3D Images", 2021
 
 See methods package documentation for usage information.
 
