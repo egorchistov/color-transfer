@@ -27,8 +27,7 @@ wandb_logger = WandbLogger(project="simp", log_model="all")
 wandb_logger.watch(model, log="all")
 
 checkpoint = pl.callbacks.ModelCheckpoint(
-    monitor="Photometric Loss",
-    save_last=True,
+    monitor="Loss",
     every_n_epochs=5)
 
 trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint], logger=wandb_logger)

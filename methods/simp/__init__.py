@@ -92,11 +92,13 @@ class SIMP(pl.LightningModule):
         loss_color_correction = F.l1_loss(corrected_left, left_gt) + \
             F.mse_loss(corrected_left, left_gt) + \
             ssim_loss(corrected_left, left_gt, window_size=11)
+        loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
         self.log("Smoothness Loss", 0.1 * loss_S + loss_PAM_S)
         self.log("Cycle Loss", loss_PAM_C)
         self.log("Color Correction Loss", loss_color_correction)
+        self.log("Loss", loss)
 
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
@@ -105,7 +107,7 @@ class SIMP(pl.LightningModule):
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
                          "Valid Mask"])
 
-        return loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
+        return loss
 
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
