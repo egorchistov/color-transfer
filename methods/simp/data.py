@@ -68,6 +68,7 @@ class SIMPDataModule(pl.LightningDataModule):
             ], p=36 / 37)
 
             train_transforms = A.Compose([
+                A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
                 A.RandomCrop(self.patch_size[0], self.patch_size[1]),
                 A.ToFloat(),
                 ToTensorV2()
@@ -76,6 +77,7 @@ class SIMPDataModule(pl.LightningDataModule):
             self.train = SIMPDataset(self.image_dir / "Train", train_transforms, distortions)
 
             val_transforms = A.Compose([
+                A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
                 A.RandomCrop(self.patch_size[0], self.patch_size[1]),
                 A.ToFloat(),
                 ToTensorV2()
