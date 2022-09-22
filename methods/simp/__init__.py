@@ -67,13 +67,13 @@ class SIMP(pl.LightningModule):
         warped_fea_right_s2 = warp_disp(fea_right_s2, -disp_s2)  # scale: 1/8
         warped_fea_right_s3 = warp_disp(fea_right_s3, -disp_s3)  # scale: 1/4
 
-        corrected_left = self.color_correction(
+        corrected_left = left + self.color_correction(
             (fea_left_s1, fea_left_s2, fea_left_s3),
             (warped_fea_right_s1, warped_fea_right_s2, warped_fea_right_s3),
             (valid_mask_s1, valid_mask_s2, valid_mask_s3))
 
         return corrected_left, (
-            F.interpolate(disp_s3, scale_factor=4, mode="nearest"),
+            4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest"),
             [att_s1, att_s2, att_s3],
             [att_cycle_s1, att_cycle_s2, att_cycle_s3],
             [valid_mask_s1, valid_mask_s2, valid_mask_s3]
