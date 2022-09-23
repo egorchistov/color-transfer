@@ -36,8 +36,9 @@ from methods.simp.modules import Hourglass, CascadedPAM, Output, ColorCorrection
 
 
 class SIMP(pl.LightningModule):
-    def __init__(self, learning_rate=1e-4):
+    def __init__(self, warmup_epochs, learning_rate=1e-4):
         super().__init__()
+        self.warmup_epochs = warmup_epochs
         self.learning_rate = learning_rate
 
         ###############################################################
@@ -49,6 +50,7 @@ class SIMP(pl.LightningModule):
         self.cas_pam = CascadedPAM([128, 96, 64])
         self.output = Output()
         self.color_correction = ColorCorrection([64, 96, 128, 160, 160, 128, 96, 64, 32, 16])
+        self.color_correction.freeze()
 
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
@@ -89,8 +91,8 @@ class SIMP(pl.LightningModule):
         loss_PAM_P = loss_pam_photometric(left, right, att, valid_mask)
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
         loss_PAM_S = loss_pam_smoothness(att)
-        loss_color_correction = F.l1_loss(corrected_left, left_gt) + \
-            F.mse_loss(corrected_left, left_gt) + \
+
+        loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt) + \
             ssim_loss(corrected_left, left_gt, window_size=11)
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
@@ -108,6 +110,11 @@ class SIMP(pl.LightningModule):
                          "Valid Mask"])
 
         return loss
+
+    def training_epoch_end(self, training_step_outputs):
+        if self.current_epoch == self.warmup_epochs - 1:
+            self.color_correction.unfreeze()
+            print("PAM Warmup Complete. Unfreeze Color Correction Network")
 
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch

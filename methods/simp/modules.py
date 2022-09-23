@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from skimage import morphology
+import pytorch_lightning as pl
 
 
 class ResB(nn.Module):
@@ -340,7 +341,7 @@ class Output(nn.Module):
             (valid_mask_left, valid_mask_right)
 
 
-class ColorCorrection(nn.Module):
+class ColorCorrection(pl.LightningModule):
     def __init__(self, channels):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
