@@ -360,7 +360,7 @@ class ColorCorrection(nn.Module):
         self.D4 = DecoderB(1, channels[7],               channels[8])           # scale: 1/2
         self.D5 = DecoderB(1, channels[8],               channels[9])           # scale: 1
 
-        self.output = nn.Conv2d(channels[9], 3, kernel_size=1)
+        self.output = nn.Conv2d(channels[9], 3, kernel_size=1, bias=False)
 
     def forward(self, fea_left, fea_right, valid_mask):
         s3 = self.s3(torch.cat((fea_left[-1], fea_right[-1], valid_mask[-1][0]), dim=1))  # scale: 1/4
