@@ -78,7 +78,7 @@ class SIMPDataModule(pl.LightningDataModule):
 
             val_transforms = A.Compose([
                 A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
-                A.RandomCrop(self.patch_size[0], self.patch_size[1]),
+                A.CenterCrop(self.patch_size[0], self.patch_size[1]),
                 A.ToFloat(),
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
