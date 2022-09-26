@@ -24,7 +24,7 @@ https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 
 import torch
 import pytorch_lightning as pl
-from kornia.color import rgb_to_yuv
+from kornia.color import rgb_to_yuv, yuv_to_rgb
 from kornia.metrics import psnr, ssim
 from kornia.losses import ssim_loss
 import torch.nn.functional as F
@@ -54,6 +54,9 @@ class SIMP(pl.LightningModule):
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
 
+        left = rgb_to_yuv(left)
+        right = rgb_to_yuv(right)
+
         (fea_left_s1, fea_left_s2, fea_left_s3), fea_refine = self.hourglass(left)
         (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.hourglass(right)
 
@@ -73,7 +76,7 @@ class SIMP(pl.LightningModule):
             (warped_fea_right_s1, warped_fea_right_s2, warped_fea_right_s3),
             (valid_mask_s1, valid_mask_s2, valid_mask_s3))
 
-        return corrected_left, (
+        return yuv_to_rgb(corrected_left), (
             4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest"),
             [att_s1, att_s2, att_s3],
             [att_cycle_s1, att_cycle_s2, att_cycle_s3],
@@ -104,7 +107,7 @@ class SIMP(pl.LightningModule):
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
                 key="Train",
-                images=[left, warp_disp(right, -disp), corrected_left, left_gt, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")],
+                images=[left, warp_disp(right, -disp), corrected_left.clamp(0, 1), left_gt, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
                          "Valid Mask"])
 
@@ -128,7 +131,7 @@ class SIMP(pl.LightningModule):
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
                 key="Validation",
-                images=[left, warp_disp(right, -disp), corrected_left, left_gt, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")],
+                images=[left, warp_disp(right, -disp), corrected_left.clamp(0, 1), left_gt, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
                          "Valid Mask"])
 
