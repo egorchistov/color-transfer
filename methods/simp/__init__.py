@@ -24,7 +24,7 @@ https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 
 import torch
 import pytorch_lightning as pl
-from kornia.color import rgb_to_lab
+from kornia.color import rgb_to_yuv
 from kornia.metrics import psnr, ssim
 from kornia.losses import ssim_loss
 import torch.nn.functional as F
@@ -91,7 +91,7 @@ class SIMP(pl.LightningModule):
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
         loss_PAM_S = loss_pam_smoothness(att)
 
-        loss_color_correction = F.smooth_l1_loss(rgb_to_lab(corrected_left), rgb_to_lab(left_gt)) + \
+        loss_color_correction = F.smooth_l1_loss(rgb_to_yuv(corrected_left), rgb_to_yuv(left_gt)) + \
             ssim_loss(corrected_left, left_gt, window_size=11)
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
