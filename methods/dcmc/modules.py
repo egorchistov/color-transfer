@@ -9,9 +9,9 @@ class ResB(nn.Module):
         super().__init__()
         self.lrelu = nn.LeakyReLU(0.1, inplace=True)
         self.body = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False))
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1))
 
     def forward(self, x):
         out = self.body(x)
@@ -22,7 +22,7 @@ class Encoder(nn.Module):
     def __init__(self, n_blocks, channels_in, channels_out):
         super().__init__()
         body = [nn.Sequential(
-            nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1, bias=False),
+            nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
         )]
         for i in range(n_blocks):
@@ -40,16 +40,16 @@ class PAB(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.head = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
         )
         self.query = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
+            nn.Conv2d(channels, channels, kernel_size=1, padding=0),
         )
         self.key = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True),
+            nn.Conv2d(channels, channels, kernel_size=1, padding=0),
         )
 
     def forward(self, x_left, x_right, cost):
