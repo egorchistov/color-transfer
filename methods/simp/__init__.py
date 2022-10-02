@@ -45,8 +45,7 @@ class SIMP(pl.LightningModule):
         ## channels  #  16 #  32   #  64   #  96   #  128   #  160   ##
         ###############################################################
 
-        self.pam_hourglass = Hourglass([32, 64, 96, 128, 160])
-        self.color_hourglass = Hourglass([32, 64, 96, 128, 160])
+        self.hourglass = Hourglass([32, 64, 96, 128, 160])
         self.cas_pam = CascadedPAM([128, 96, 64])
         self.output = Output()
         self.color_correction = ColorCorrection([64, 96, 128, 160, 160, 128, 96, 64, 32, 16])
@@ -57,8 +56,8 @@ class SIMP(pl.LightningModule):
         normalize(left, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=True)
         normalize(right, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=True)
 
-        (fea_left_s1, fea_left_s2, fea_left_s3), fea_refine = self.pam_hourglass(left)
-        (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.pam_hourglass(right)
+        (fea_left_s1, fea_left_s2, fea_left_s3), fea_refine = self.hourglass(left)
+        (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.hourglass(right)
 
         cost_s1, cost_s2, cost_s3 = self.cas_pam([fea_left_s1, fea_left_s2, fea_left_s3],
                                                  [fea_right_s1, fea_right_s2, fea_right_s3])
@@ -67,16 +66,13 @@ class SIMP(pl.LightningModule):
         disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(cost_s2, max_disp // 8)
         disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(cost_s3, max_disp // 4)
 
-        (color_fea_left_s1, color_fea_left_s2, color_fea_left_s3) = self.color_hourglass(left)[0]
-        (color_fea_right_s1, color_fea_right_s2, color_fea_right_s3) = self.color_hourglass(right)[0]
-
-        warped_color_fea_right_s1 = warp_disp(color_fea_right_s1, -disp_s1)  # scale: 1/16
-        warped_color_fea_right_s2 = warp_disp(color_fea_right_s2, -disp_s2)  # scale: 1/8
-        warped_color_fea_right_s3 = warp_disp(color_fea_right_s3, -disp_s3)  # scale: 1/4
+        warped_fea_right_s1 = warp_disp(fea_right_s1, -disp_s1)  # scale: 1/16
+        warped_fea_right_s2 = warp_disp(fea_right_s2, -disp_s2)  # scale: 1/8
+        warped_fea_right_s3 = warp_disp(fea_right_s3, -disp_s3)  # scale: 1/4
 
         corrected_left = self.color_correction(
-            (color_fea_left_s1, color_fea_left_s2, color_fea_left_s3),
-            (warped_color_fea_right_s1, warped_color_fea_right_s2, warped_color_fea_right_s3),
+            (fea_left_s1, fea_left_s2, fea_left_s3),
+            (warped_fea_right_s1, warped_fea_right_s2, warped_fea_right_s3),
             (valid_mask_s1, valid_mask_s2, valid_mask_s3),
             left)
 
