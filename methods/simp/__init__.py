@@ -25,9 +25,9 @@ https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 import torch
 import pytorch_lightning as pl
 from kornia.metrics import psnr, ssim
-from kornia.losses import ssim_loss
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
+from torchvision.transforms.functional import normalize
 
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
@@ -54,6 +54,9 @@ class SIMP(pl.LightningModule):
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
 
+        normalize(left, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=True)
+        normalize(right, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=True)
+
         (fea_left_s1, fea_left_s2, fea_left_s3), fea_refine = self.pam_hourglass(left)
         (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.pam_hourglass(right)
 
@@ -74,7 +77,10 @@ class SIMP(pl.LightningModule):
         corrected_left = self.color_correction(
             (color_fea_left_s1, color_fea_left_s2, color_fea_left_s3),
             (warped_color_fea_right_s1, warped_color_fea_right_s2, warped_color_fea_right_s3),
-            (valid_mask_s1, valid_mask_s2, valid_mask_s3))
+            (valid_mask_s1, valid_mask_s2, valid_mask_s3),
+            left)
+
+        normalize(corrected_left, mean=[-0.485/0.229, -0.456/0.224, -0.406/0.255], std=[1/0.229, 1/0.224, 1/0.255], inplace=True)
 
         return corrected_left, (
             4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest"),
