@@ -359,7 +359,7 @@ class ColorCorrection(pl.LightningModule):
         self.D2 = DecoderB(1, channels[5] + channels[6], channels[6])           # scale: 1/8
         self.D3 = DecoderB(1, channels[6] + channels[7], channels[7])           # scale: 1/4
         self.D4 = DecoderB(1, channels[7],               channels[8])           # scale: 1/2
-        self.D5 = DecoderB(1, channels[8],               channels[9])           # scale: 1
+        self.D5 = DecoderB(1, channels[8] + 3,           channels[9])           # scale: 1
 
         self.output = nn.Conv2d(channels[9], 3, kernel_size=1, bias=False)
 
