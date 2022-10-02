@@ -71,7 +71,7 @@ class SIMP(pl.LightningModule):
         warped_color_fea_right_s2 = warp_disp(color_fea_right_s2, -disp_s2)  # scale: 1/8
         warped_color_fea_right_s3 = warp_disp(color_fea_right_s3, -disp_s3)  # scale: 1/4
 
-        corrected_left = left + self.color_correction(
+        corrected_left = self.color_correction(
             (color_fea_left_s1, color_fea_left_s2, color_fea_left_s3),
             (warped_color_fea_right_s1, warped_color_fea_right_s2, warped_color_fea_right_s3),
             (valid_mask_s1, valid_mask_s2, valid_mask_s3))
@@ -94,8 +94,7 @@ class SIMP(pl.LightningModule):
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
         loss_PAM_S = loss_pam_smoothness(att)
 
-        loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt) + \
-            ssim_loss(corrected_left, left_gt, window_size=11)
+        loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
