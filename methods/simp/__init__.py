@@ -24,7 +24,6 @@ https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 
 import torch
 import pytorch_lightning as pl
-from kornia.color import rgb_to_yuv, yuv_to_rgb
 from kornia.metrics import psnr, ssim
 from kornia.losses import ssim_loss
 import torch.nn.functional as F
@@ -54,9 +53,6 @@ class SIMP(pl.LightningModule):
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
 
-        left = rgb_to_yuv(left)
-        right = rgb_to_yuv(right)
-
         (fea_left_s1, fea_left_s2, fea_left_s3), fea_refine = self.hourglass(left)
         (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.hourglass(right)
 
@@ -76,7 +72,7 @@ class SIMP(pl.LightningModule):
             (warped_fea_right_s1, warped_fea_right_s2, warped_fea_right_s3),
             (valid_mask_s1, valid_mask_s2, valid_mask_s3))
 
-        return yuv_to_rgb(corrected_left), (
+        return corrected_left, (
             4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest"),
             [att_s1, att_s2, att_s3],
             [att_cycle_s1, att_cycle_s2, att_cycle_s3],
@@ -94,14 +90,14 @@ class SIMP(pl.LightningModule):
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
         loss_PAM_S = loss_pam_smoothness(att)
 
-        loss_color_correction = F.smooth_l1_loss(rgb_to_yuv(corrected_left), rgb_to_yuv(left_gt)) + \
+        loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt) + \
             ssim_loss(corrected_left, left_gt, window_size=11)
-        loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
+        loss = 10 * loss_color_correction + loss_P + 0.5 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
-        self.log("Smoothness Loss", 0.1 * loss_S + loss_PAM_S)
+        self.log("Smoothness Loss", 0.5 * loss_S + loss_PAM_S)
         self.log("Cycle Loss", loss_PAM_C)
-        self.log("Color Correction Loss", loss_color_correction)
+        self.log("Color Correction Loss", 10 * loss_color_correction)
         self.log("Loss", loss)
 
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
@@ -119,13 +115,9 @@ class SIMP(pl.LightningModule):
         corrected_left, (disp, _, _, valid_mask) = self(left, right)
 
         psnr_value = psnr(corrected_left, left_gt, max_val=1)
-        occlusion_mask = 1 - F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
-        psnr_occlusions_value = psnr(corrected_left * occlusion_mask, left_gt * occlusion_mask, max_val=1) + \
-            10 * torch.log10(occlusion_mask.mean())
         ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()
 
         self.log("PSNR", psnr_value)
-        self.log("PSNR (Occlusions)", psnr_occlusions_value)
         self.log("SSIM", ssim_value)
 
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
