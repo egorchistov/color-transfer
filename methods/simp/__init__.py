@@ -92,12 +92,12 @@ class SIMP(pl.LightningModule):
 
         loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt) + \
             ssim_loss(corrected_left, left_gt, window_size=11)
-        loss = 10 * loss_color_correction + loss_P + 0.5 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
+        loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
-        self.log("Smoothness Loss", 0.5 * loss_S + loss_PAM_S)
+        self.log("Smoothness Loss", 0.1 * loss_S + loss_PAM_S)
         self.log("Cycle Loss", loss_PAM_C)
-        self.log("Color Correction Loss", 10 * loss_color_correction)
+        self.log("Color Correction Loss", loss_color_correction)
         self.log("Loss", loss)
 
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
