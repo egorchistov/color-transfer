@@ -100,7 +100,8 @@ class SIMP(pl.LightningModule):
         warped_right = warp_disp(right, -disp)
         valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
 
-        loss_color_correction = F.smooth_l1_loss(rgb_to_yuv(corrected_left)[:, 1:], rgb_to_yuv(left_gt)[:, 1:])
+        weights = torch.tensor([1, 6, 6]).reshape(1, 3, 1, 1)
+        loss_color_correction = F.smooth_l1_loss(rgb_to_yuv(corrected_left) * weights, rgb_to_yuv(left_gt) * weights)
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
