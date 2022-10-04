@@ -96,7 +96,10 @@ class SIMP(pl.LightningModule):
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
         loss_PAM_S = loss_pam_smoothness(att)
 
-        loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
+        warped_right = warp_disp(right, -disp)
+        valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
+
+        loss_color_correction = F.smooth_l1_loss(corrected_left * valid_mask, warped_right * valid_mask)
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
@@ -108,7 +111,7 @@ class SIMP(pl.LightningModule):
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
                 key="Train",
-                images=[left, warp_disp(right, -disp), corrected_left.clamp(0, 1), left_gt, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")],
+                images=[left, warped_right, corrected_left.clamp(0, 1), left_gt, right, disp, valid_mask],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
                          "Valid Mask"])
 
