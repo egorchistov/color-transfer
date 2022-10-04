@@ -25,6 +25,7 @@ https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 import torch
 import pytorch_lightning as pl
 from kornia.metrics import psnr, ssim
+from kornia.color import rgb_to_yuv
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 from torchvision.transforms.functional import normalize
@@ -99,7 +100,7 @@ class SIMP(pl.LightningModule):
         warped_right = warp_disp(right, -disp)
         valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
 
-        loss_color_correction = F.smooth_l1_loss(corrected_left * valid_mask, warped_right * valid_mask)
+        loss_color_correction = F.smooth_l1_loss(rgb_to_yuv(corrected_left)[:, 1:], rgb_to_yuv(left_gt)[:, 1:])
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
