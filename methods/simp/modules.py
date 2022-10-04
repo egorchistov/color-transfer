@@ -359,11 +359,11 @@ class ColorCorrection(pl.LightningModule):
         self.D2 = DecoderB(1, channels[5] + channels[6], channels[6])           # scale: 1/8
         self.D3 = DecoderB(1, channels[6] + channels[7], channels[7])           # scale: 1/4
         self.D4 = DecoderB(1, channels[7],               channels[8])           # scale: 1/2
-        self.D5 = DecoderB(1, channels[8] + 3,           channels[9])           # scale: 1
+        self.D5 = DecoderB(1, channels[8] + 3 + 3,       channels[9])           # scale: 1
 
         self.output = nn.Conv2d(channels[9], 3, kernel_size=1, bias=False)
 
-    def forward(self, fea_left, fea_right, valid_mask, left):
+    def forward(self, fea_left, fea_right, valid_mask, left, warped_right):
         s3 = self.s3(torch.cat((fea_left[-1], fea_right[-1], valid_mask[-1][0]), dim=1))  # scale: 1/4
         s2 = self.s2(torch.cat((fea_left[-2], fea_right[-2], valid_mask[-2][0]), dim=1))  # scale: 1/8
         s1 = self.s1(torch.cat((fea_left[-3], fea_right[-3], valid_mask[-3][0]), dim=1))  # scale: 1/16
@@ -379,6 +379,6 @@ class ColorCorrection(pl.LightningModule):
         fea_D2 = self.D2(torch.cat((self.upsample(fea_D1), fea_E1), dim=1))     # scale: 1/8
         fea_D3 = self.D3(torch.cat((self.upsample(fea_D2), fea_E0), dim=1))     # scale: 1/4
         fea_D4 = self.D4(self.upsample(fea_D3))                                 # scale: 1/2
-        fea_D5 = self.D5(torch.cat((self.upsample(fea_D4), left), dim=1))       # scale: 1
+        fea_D5 = self.D5(torch.cat((self.upsample(fea_D4), left, warped_right), dim=1))       # scale: 1
 
         return self.output(fea_D5)

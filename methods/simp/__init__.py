@@ -54,9 +54,6 @@ class SIMP(pl.LightningModule):
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
 
-        normalize(left, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=True)
-        normalize(right, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], inplace=True)
-
         (fea_left_s1, fea_left_s2, fea_left_s3), fea_refine = self.hourglass(left)
         (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.hourglass(right)
 
@@ -71,16 +68,18 @@ class SIMP(pl.LightningModule):
         warped_fea_right_s2 = warp_disp(fea_right_s2, -disp_s2)  # scale: 1/8
         warped_fea_right_s3 = warp_disp(fea_right_s3, -disp_s3)  # scale: 1/4
 
+        disp = 4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest")
+        warped_right = warp_disp(right, -disp)
+
         corrected_left = self.color_correction(
             (fea_left_s1, fea_left_s2, fea_left_s3),
             (warped_fea_right_s1, warped_fea_right_s2, warped_fea_right_s3),
             (valid_mask_s1, valid_mask_s2, valid_mask_s3),
-            left)
-
-        normalize(corrected_left, mean=[-0.485/0.229, -0.456/0.224, -0.406/0.255], std=[1/0.229, 1/0.224, 1/0.255], inplace=True)
+            left,
+            warped_right)
 
         return corrected_left, (
-            4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest"),
+            disp,
             [att_s1, att_s2, att_s3],
             [att_cycle_s1, att_cycle_s2, att_cycle_s3],
             [valid_mask_s1, valid_mask_s2, valid_mask_s3]
@@ -100,8 +99,7 @@ class SIMP(pl.LightningModule):
         warped_right = warp_disp(right, -disp)
         valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
 
-        weights = torch.tensor([1, 6, 6], device=self.device).reshape(1, 3, 1, 1)
-        loss_color_correction = F.smooth_l1_loss(rgb_to_yuv(corrected_left) * weights, rgb_to_yuv(left_gt) * weights)
+        loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
