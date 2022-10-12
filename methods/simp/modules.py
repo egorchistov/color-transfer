@@ -10,11 +10,9 @@ class ResB(nn.Module):
         super().__init__()
         self.lrelu = nn.LeakyReLU(0.1, inplace=True)
         self.body = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels))
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1))
 
     def forward(self, x):
         out = self.body(x)
@@ -27,14 +25,12 @@ class EncoderB(nn.Module):
         body = []
         if downsample:
             body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(channels_out),
+                nn.Conv2d(channels_in, channels_out, kernel_size=3, stride=2, padding=1),
                 nn.LeakyReLU(0.1, inplace=True),
             ))
         if not downsample:
             body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1, bias=False),
-                nn.BatchNorm2d(channels_out),
+                nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1),
                 nn.LeakyReLU(0.1, inplace=True),
             ))
         for i in range(n_blocks):
@@ -52,8 +48,7 @@ class DecoderB(nn.Module):
         super().__init__()
         body = []
         body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=1, bias=False),
-                nn.BatchNorm2d(channels_out),
+                nn.Conv2d(channels_in, channels_out, kernel_size=1),
                 nn.LeakyReLU(0.1, inplace=True),
             ))
         for i in range(n_blocks):
@@ -101,21 +96,13 @@ class PAB(nn.Module):
     def __init__(self, channels):
         super().__init__()
         self.head = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
             nn.LeakyReLU(0.1, inplace=True),
         )
-        self.query = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(channels),
-        )
-        self.key = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(channels),
-        )
+        self.query = nn.Conv2d(channels, channels, kernel_size=1)
+        self.key = nn.Conv2d(channels, channels, kernel_size=1)
 
     def forward(self, x_left, x_right, cost):
         """
