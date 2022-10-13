@@ -15,7 +15,8 @@ python -m methods.simp.train \
     --check_val_every_n_epoch=5
 ```
 
-We use Tesla P100-16GB in our expreriments.
+In our expriments we use Kaggle GPU environment:
+Intel Xeon CPU (2 cores), 13 Gb RAM and Tesla P100-16GB.
 
 See https://wandb.ai/egorchistov/simp for training logs and artifacts.
 
@@ -70,7 +71,7 @@ class SIMP(pl.LightningModule):
         self.hourglass = Hourglass([32, 64, 96, 128, 160])
         self.cas_pam = CascadedPAM([128, 96, 64])
         self.output = Output()
-        self.color_correction = ColorCorrection([64, 96, 128, 160, 160, 128, 96, 64, 32, 16])
+        self.color_correction = ColorCorrection([16, 32, 64, 96, 128, 160])
 
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape

@@ -19,38 +19,14 @@ class ResB(nn.Module):
         return self.lrelu(out + x)
 
 
-class EncoderB(nn.Module):
-    def __init__(self, n_blocks, channels_in, channels_out, downsample=False):
-        super().__init__()
-        body = []
-        if downsample:
-            body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=3, stride=2, padding=1),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
-        if not downsample:
-            body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
-        for i in range(n_blocks):
-            body.append(
-                ResB(channels_out)
-            )
-        self.body = nn.Sequential(*body)
-
-    def forward(self, x):
-        return self.body(x)
-
-
-class DecoderB(nn.Module):
+class B(nn.Module):
     def __init__(self, n_blocks, channels_in, channels_out):
         super().__init__()
         body = []
         body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=1),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
+            nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1),
+            nn.LeakyReLU(0.1, inplace=True),
+        ))
         for i in range(n_blocks):
             body.append(
                 ResB(channels_out)
@@ -59,37 +35,64 @@ class DecoderB(nn.Module):
 
     def forward(self, x):
         return self.body(x)
+
+
+class Upsample(torch.nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.upsample = nn.Sequential(
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.LeakyReLU(0.1, inplace=True))
+
+    def forward(self, x):
+        return self.upsample(x)
+
+
+class Downsample(torch.nn.Module):
+    def __init__(self, in_channels, out_channels):
+        super().__init__()
+        self.downsample = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),
+            nn.LeakyReLU(0.1, inplace=True))
+
+    def forward(self, x):
+        return self.downsample(x)
 
 
 class Hourglass(nn.Module):
     def __init__(self, channels):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
-        self.E0 = EncoderB(1,           3, channels[0], downsample=True)               # scale: 1/2
-        self.E1 = EncoderB(1, channels[0], channels[1], downsample=True)               # scale: 1/4
-        self.E2 = EncoderB(1, channels[1], channels[2], downsample=True)               # scale: 1/8
-        self.E3 = EncoderB(1, channels[2], channels[3], downsample=True)               # scale: 1/16
-        self.E4 = EncoderB(1, channels[3], channels[4], downsample=True)               # scale: 1/32
+        self.E0_downsample = Downsample(3, channels[0])
+        self.E1 = B(1, channels[0], channels[0])
+        self.E1_downsample = Downsample(channels[0], channels[1])
+        self.E2 = B(1, channels[1], channels[1])
+        self.E2_downsample = Downsample(channels[1], channels[2])
+        self.E3 = B(1, channels[2], channels[2])
+        self.E3_downsample = Downsample(channels[2], channels[3])
+        self.E4 = B(1, channels[3], channels[3])
+        self.E4_downsample = Downsample(channels[3], channels[4])
+        self.E5 = B(1, channels[4], channels[4])
 
-        self.D0 = EncoderB(1, channels[4], channels[4], downsample=False)              # scale: 1/32
-        self.D1 = DecoderB(1, channels[4] + channels[3], channels[3])                  # scale: 1/16
-        self.D2 = DecoderB(1, channels[3] + channels[2], channels[2])                  # scale: 1/8
-        self.D3 = DecoderB(1, channels[2] + channels[1], channels[1])                  # scale: 1/4
+        self.E5_upsample = Upsample(channels[4], channels[3])
+        self.D4 = B(1, channels[3], channels[3])
+        self.D4_upsample = Upsample(channels[3], channels[2])
+        self.D3 = B(1, channels[2], channels[2])
+        self.E3_upsample = Upsample(channels[2], channels[1])
+        self.D2 = B(1, channels[1], channels[1])
 
     def forward(self, x):
-        fea_E0 = self.E0(x)                                                            # scale: 1/2
-        fea_E1 = self.E1(fea_E0)                                                       # scale: 1/4
-        fea_E2 = self.E2(fea_E1)                                                       # scale: 1/8
-        fea_E3 = self.E3(fea_E2)                                                       # scale: 1/16
-        fea_E4 = self.E4(fea_E3)                                                       # scale: 1/32
+        fea_E1 = self.E1(self.E0_downsample(x))
+        fea_E2 = self.E2(self.E1_downsample(fea_E1))
+        fea_E3 = self.E3(self.E2_downsample(fea_E2))
+        fea_E4 = self.E4(self.E3_downsample(fea_E3))
+        fea_E5 = self.E5(self.E4_downsample(fea_E4))
 
-        fea_D0 = self.D0(fea_E4)                                                       # scale: 1/32
-        fea_D1 = self.D1(torch.cat((self.upsample(fea_D0), fea_E3), 1))                # scale: 1/16
-        fea_D2 = self.D2(torch.cat((self.upsample(fea_D1), fea_E2), 1))                # scale: 1/8
-        fea_D3 = self.D3(torch.cat((self.upsample(fea_D2), fea_E1), 1))                # scale: 1/4
+        fea_D4 = self.D4(torch.cat((self.E5_upsample(fea_E5), fea_E4), dim=1))
+        fea_D3 = self.D3(torch.cat((self.D4_upsample(fea_D4), fea_E3), dim=1))
+        fea_D2 = self.D2(torch.cat((self.D3_upsample(fea_D3), fea_E2), dim=1))
 
-        return (fea_D1, fea_D2, fea_D3), fea_E1
+        return (fea_D4, fea_D3, fea_D2), fea_E2
 
 
 class PAB(nn.Module):
@@ -151,7 +154,7 @@ class PAM_stage(nn.Module):
 
 class CascadedPAM(nn.Module):
     def __init__(self, channels):
-        super(CascadedPAM, self).__init__()
+        super().__init__()
         self.stage1 = PAM_stage(channels[0])
         self.stage2 = PAM_stage(channels[1])
         self.stage3 = PAM_stage(channels[2])
@@ -215,18 +218,18 @@ class CascadedPAM(nn.Module):
         return [cost_s1, cost_s2, cost_s3]
 
 
-def morphologic_process(mask):
-    b, _, _, _ = mask.shape
-    mask = ~mask
-    mask_np = mask.cpu().numpy().astype(bool)
-    mask_np = morphology.remove_small_objects(mask_np, 20, 2)
-    mask_np = morphology.remove_small_holes(mask_np, 10, 2)
-    for idx in range(b):
-        mask_np[idx, 0, :, :] = morphology.binary_closing(mask_np[idx, 0, :, :], morphology.disk(3))
-    mask_np = 1 - mask_np
-    mask_np = mask_np.astype(float)
-
-    return torch.from_numpy(mask_np).float().to(mask.device)
+# def morphologic_process(mask):
+#     b, _, _, _ = mask.shape
+#     mask = ~mask
+#     mask_np = mask.cpu().numpy().astype(bool)
+#     mask_np = morphology.remove_small_objects(mask_np, 20, 2)
+#     mask_np = morphology.remove_small_holes(mask_np, 10, 2)
+#     for idx in range(b):
+#         mask_np[idx, 0, :, :] = morphology.binary_closing(mask_np[idx, 0, :, :], morphology.disk(3))
+#     mask_np = 1 - mask_np
+#     mask_np = mask_np.astype(float)
+#
+#     return torch.from_numpy(mask_np).float().to(mask.device)
 
 
 def regress_disp(att, valid_mask):
@@ -306,7 +309,7 @@ class Output(nn.Module):
         # valid mask (left image)
         valid_mask_left = torch.sum(att_left2right.detach(), -2) > 0.1
         valid_mask_left = valid_mask_left.view(b, 1, h, w)
-        valid_mask_left = morphologic_process(valid_mask_left)
+        # valid_mask_left = morphologic_process(valid_mask_left)
 
         # disparity
         disp = regress_disp(att_right2left, valid_mask_left)
@@ -314,7 +317,7 @@ class Output(nn.Module):
         # valid mask (right image)
         valid_mask_right = torch.sum(att_right2left.detach(), -2) > 0.1
         valid_mask_right = valid_mask_right.view(b, 1, h, w)
-        valid_mask_right = morphologic_process(valid_mask_right)
+        # valid_mask_right = morphologic_process(valid_mask_right)
 
         # cycle-attention maps
         att_left2right2left = torch.matmul(att_right2left, att_left2right).view(b, h, w, w)
@@ -329,41 +332,38 @@ class Output(nn.Module):
 class ColorCorrection(pl.LightningModule):
     def __init__(self, channels):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor=2, mode="bilinear", align_corners=False)
 
-        self.s3 = EncoderB(1, channels[0] + channels[0] + 1, channels[0], downsample=False)  # scale: 1/4
-        self.s2 = EncoderB(1, channels[1] + channels[1] + 1, channels[1], downsample=False)  # scale: 1/8
-        self.s1 = EncoderB(1, channels[2] + channels[2] + 1, channels[2], downsample=False)  # scale: 1/16
+        self.E2 = B(1, 2 * channels[2] + 1, channels[2])
+        self.E2_downsample = Downsample(channels[2], channels[3])
+        self.E3 = B(1, 3 * channels[3] + 1, channels[3])
+        self.E3_downsample = Downsample(channels[3], channels[4])
+        self.E4 = B(1, 3 * channels[4] + 1, channels[4])
+        self.E4_downsample = Downsample(channels[4], channels[5])
+        self.E5 = B(1, 3 * channels[5] + 1, channels[5])
 
-        self.E1 = EncoderB(1, channels[0],                   channels[1], downsample=True)    # scale: 1/8
-        self.E2 = EncoderB(1, channels[1] + channels[1],     channels[2], downsample=True)    # scale: 1/16
-        self.E3 = EncoderB(1, channels[2] + channels[2],     channels[3], downsample=True)    # scale: 1/32
+        self.E5_upsample = Upsample(channels[5], channels[4])
+        self.D5 = B(1, 2 * channels[4], channels[4])
+        self.D5_upsample = Upsample(channels[4], channels[3])
+        self.D4 = B(1, 2 * channels[3], channels[3])
+        self.D4_upsample = Upsample(channels[3], channels[2])
+        self.D3 = B(1, 2 * channels[2], channels[2])
+        self.D3_upsample = Upsample(channels[2], channels[1])
+        self.D2 = B(1, channels[1], channels[1])
+        self.D2_upsample = Upsample(channels[1], channels[0])
+        self.D1 = B(1, 2 * channels[0], channels[0])
 
-        self.D0 = EncoderB(1, channels[4],     channels[4], downsample=False)   # scale: 1/32
-        self.D1 = DecoderB(1, channels[4] + channels[5], channels[5])           # scale: 1/16
-        self.D2 = DecoderB(1, channels[5] + channels[6], channels[6])           # scale: 1/8
-        self.D3 = DecoderB(1, channels[6] + channels[7], channels[7])           # scale: 1/4
-        self.D4 = DecoderB(1, channels[7],               channels[8])           # scale: 1/2
-        self.D5 = DecoderB(1, channels[8] + 3 + 3,       channels[9])           # scale: 1
-
-        self.output = nn.Conv2d(channels[9], 3, kernel_size=1, bias=False)
+        self.output = B(1, channels[0], 3)
 
     def forward(self, fea_left, fea_right, valid_mask, left, warped_right):
-        s3 = self.s3(torch.cat((fea_left[-1], fea_right[-1], valid_mask[-1][0]), dim=1))  # scale: 1/4
-        s2 = self.s2(torch.cat((fea_left[-2], fea_right[-2], valid_mask[-2][0]), dim=1))  # scale: 1/8
-        s1 = self.s1(torch.cat((fea_left[-3], fea_right[-3], valid_mask[-3][0]), dim=1))  # scale: 1/16
+        fea_E2 = self.E2(torch.cat((fea_left[-1], fea_right[-1], valid_mask[-1][0]), dim=1))
+        fea_E3 = self.E3(torch.cat((self.E2_downsample(fea_E2), fea_left[-1], fea_right[-1], valid_mask[-1][0]), dim=1))
+        fea_E4 = self.E4(torch.cat((self.E3_downsample(fea_E3), fea_left[-2], fea_right[-2], valid_mask[-2][0]), dim=1))
+        fea_E5 = self.E5(torch.cat((self.E4_downsample(fea_E4), fea_left[-3], fea_right[-3], valid_mask[-3][0]), dim=1))
 
-        fea_E0 = s3
+        fea_D5 = self.D5(torch.cat((self.E5_upsample(fea_E5), fea_E4), dim=1))
+        fea_D4 = self.D4(torch.cat((self.D5_upsample(fea_D5), fea_E3), dim=1))
+        fea_D3 = self.D3(torch.cat((self.D4_upsample(fea_D4), fea_E2), dim=1))
+        fea_D2 = self.D2(self.D3_upsample(fea_D3))
+        fea_D1 = self.D1(torch.cat((self.D3_upsample(fea_D2), left, warped_right), dim=1))
 
-        fea_E1 = self.E1(fea_E0)                                                # scale: 1/8
-        fea_E2 = self.E2(torch.cat((fea_E1, s2), dim=1))                        # scale: 1/16
-        fea_E3 = self.E3(torch.cat((fea_E2, s1), dim=1))                        # scale: 1/32
-
-        fea_D0 = self.D0(fea_E3)                                                # scale: 1/32
-        fea_D1 = self.D1(torch.cat((self.upsample(fea_D0), fea_E2), dim=1))     # scale: 1/16
-        fea_D2 = self.D2(torch.cat((self.upsample(fea_D1), fea_E1), dim=1))     # scale: 1/8
-        fea_D3 = self.D3(torch.cat((self.upsample(fea_D2), fea_E0), dim=1))     # scale: 1/4
-        fea_D4 = self.D4(self.upsample(fea_D3))                                 # scale: 1/2
-        fea_D5 = self.D5(torch.cat((self.upsample(fea_D4), left, warped_right), dim=1))       # scale: 1
-
-        return self.output(fea_D5)
+        return self.output(fea_D1)
