@@ -25,6 +25,7 @@ https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 """
 
 import torch
+import kornia
 import pytorch_lightning as pl
 from kornia.metrics import psnr, ssim
 import torch.nn.functional as F
@@ -36,10 +37,30 @@ from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_
 from methods.simp.modules import Hourglass, CascadedPAM, Output, ColorCorrection
 
 
+class Distortions(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.distortions = kornia.augmentation.container.AugmentationSequential(
+            kornia.augmentation.RandomPlanckianJitter(),
+            kornia.augmentation.RandomPlasmaBrightness(),
+            kornia.augmentation.RandomPlasmaContrast(),
+            kornia.augmentation.RandomSharpness(),
+            kornia.augmentation.RandomGaussianBlur((3, 3), (0.1, 2.0)),
+            kornia.augmentation.RandomMotionBlur(3, 35., 0.5),
+            same_on_batch=True,
+            random_apply=1)
+
+    @torch.no_grad()
+    def forward(self, x):
+        return self.distortions(x)
+
+
 class SIMP(pl.LightningModule):
     def __init__(self, learning_rate=1e-4):
         super().__init__()
         self.learning_rate = learning_rate
+        self.distortions = Distortions()
 
         ###############################################################
         ## scale     #  1  #  1/2  #  1/4  #  1/8  #  1/16  #  1/32  ##
@@ -84,6 +105,12 @@ class SIMP(pl.LightningModule):
             [att_cycle_s1, att_cycle_s2, att_cycle_s3],
             [valid_mask_s1, valid_mask_s2, valid_mask_s3]
         )
+
+    def on_after_batch_transfer(self, batch, dataloader_idx):
+        left_gt, right = batch
+        left = self.distortions(left_gt)
+
+        return left, left_gt, right
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
