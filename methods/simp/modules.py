@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from skimage import morphology
 import pytorch_lightning as pl
 
 
@@ -218,20 +217,6 @@ class CascadedPAM(nn.Module):
         return [cost_s1, cost_s2, cost_s3]
 
 
-# def morphologic_process(mask):
-#     b, _, _, _ = mask.shape
-#     mask = ~mask
-#     mask_np = mask.cpu().numpy().astype(bool)
-#     mask_np = morphology.remove_small_objects(mask_np, 20, 2)
-#     mask_np = morphology.remove_small_holes(mask_np, 10, 2)
-#     for idx in range(b):
-#         mask_np[idx, 0, :, :] = morphology.binary_closing(mask_np[idx, 0, :, :], morphology.disk(3))
-#     mask_np = 1 - mask_np
-#     mask_np = mask_np.astype(float)
-#
-#     return torch.from_numpy(mask_np).float().to(mask.device)
-
-
 def regress_disp(att, valid_mask):
     """
     :param att:         B * H * W * W
@@ -309,7 +294,7 @@ class Output(nn.Module):
         # valid mask (left image)
         valid_mask_left = torch.sum(att_left2right.detach(), -2) > 0.1
         valid_mask_left = valid_mask_left.view(b, 1, h, w)
-        valid_mask_left = valid_mask_left.float()  # valid_mask_left = morphologic_process(valid_mask_left)
+        valid_mask_left = valid_mask_left.float()
 
         # disparity
         disp = regress_disp(att_right2left, valid_mask_left)
@@ -317,7 +302,7 @@ class Output(nn.Module):
         # valid mask (right image)
         valid_mask_right = torch.sum(att_right2left.detach(), -2) > 0.1
         valid_mask_right = valid_mask_right.view(b, 1, h, w)
-        valid_mask_right = valid_mask_right.float()  # valid_mask_right = morphologic_process(valid_mask_right)
+        valid_mask_right = valid_mask_right.float()
 
         # cycle-attention maps
         att_left2right2left = torch.matmul(att_right2left, att_left2right).view(b, h, w, w)

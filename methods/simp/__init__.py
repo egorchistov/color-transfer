@@ -49,8 +49,9 @@ class Distortions(torch.nn.Module):
             kornia.augmentation.RandomSharpness(),
             kornia.augmentation.RandomGaussianBlur((3, 3), (0.1, 2.0)),
             kornia.augmentation.RandomMotionBlur(3, 35., 0.5),
+            kornia.augmentation.RandomGrayscale(),
             same_on_batch=True,
-            random_apply=1)
+            random_apply=2)
 
     @torch.no_grad()
     def forward(self, x):
@@ -156,5 +157,6 @@ class SIMP(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=25, gamma=0.1)
 
-        return {"optimizer": optimizer}
+        return {"optimizer": optimizer, "scheduler": scheduler}
