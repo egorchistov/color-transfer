@@ -86,10 +86,10 @@ class SIMPDataModule(pl.LightningDataModule):
             self.val = SIMPDataset(self.image_dir / "Validation", val_transforms, distortions)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True)
+        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size)
+        return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=4, pin_memory=True)
 
     def plot_example(self):
         idx = np.random.choice(len(self.train))
