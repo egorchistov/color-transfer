@@ -12,7 +12,7 @@ from torch.utils.data import Dataset
 
 
 class SIMPDataset(Dataset):
-    def __init__(self, image_dir: Path, transforms, distortions):
+    def __init__(self, image_dir: Path, transforms):
         """First distortions are applied to the left image, then transforms are applied to both"""
 
         self.lefts = sorted(image_dir.glob("*_L.png"))
@@ -21,21 +21,18 @@ class SIMPDataset(Dataset):
         assert len(self.lefts) == len(self.rights)
 
         self.transforms = transforms
-        self.distortions = distortions
 
     def __len__(self):
         return len(self.lefts)
 
     def __getitem__(self, index):
-        left_gt = np.array(Image.open(self.lefts[index]).convert("RGB"))
+        left = np.array(Image.open(self.lefts[index]).convert("RGB"))
         right = np.array(Image.open(self.rights[index]).convert("RGB"))
 
-        left = self.distortions(image=left_gt)["image"]
+        t = self.transforms(image=left, right=right)
+        left, right = t["image"], t["right"]
 
-        t = self.transforms(image=left, left_gt=left_gt, right=right)
-        left, left_gt, right = t["image"], t["left_gt"], t["right"]
-
-        return left, left_gt, right
+        return left, right
 
 
 class SIMPDataModule(pl.LightningDataModule):
@@ -52,38 +49,23 @@ class SIMPDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         if stage == "fit" or stage is None:
-            distortions = A.OneOf([
-                A.RandomBrightnessContrast(contrast_limit=0, brightness_limit=(-0.3, -0.1)),
-                A.RandomBrightnessContrast(contrast_limit=0, brightness_limit=(0.1, 0.3)),
-                A.RandomBrightnessContrast(contrast_limit=(-0.3, -0.1), brightness_limit=0),
-                A.RandomBrightnessContrast(contrast_limit=(0.1, 0.3), brightness_limit=0),
-                A.RandomGamma(gamma_limit=(70, 90)),
-                A.RandomGamma(gamma_limit=(110, 130)),
-                A.HueSaturationValue(hue_shift_limit=(-30, -10), sat_shift_limit=0, val_shift_limit=0),
-                A.HueSaturationValue(hue_shift_limit=(10, 30), sat_shift_limit=0, val_shift_limit=0),
-                A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=(-30, -10), val_shift_limit=0),
-                A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=(10, 30), val_shift_limit=0),
-                A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=0, val_shift_limit=(-30, -10)),
-                A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=0, val_shift_limit=(10, 30)),
-            ], p=36 / 37)
-
             train_transforms = A.Compose([
                 A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
                 A.RandomCrop(self.patch_size[0], self.patch_size[1]),
                 A.ToFloat(),
                 ToTensorV2()
-            ], additional_targets={"left_gt": "image", "right": "image"})
+            ], additional_targets={"right": "image"})
 
-            self.train = SIMPDataset(self.image_dir / "Train", train_transforms, distortions)
+            self.train = SIMPDataset(self.image_dir / "Train", train_transforms)
 
             val_transforms = A.Compose([
                 A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
                 A.CenterCrop(self.patch_size[0], self.patch_size[1]),
                 A.ToFloat(),
                 ToTensorV2()
-            ], additional_targets={"left_gt": "image", "right": "image"})
+            ], additional_targets={"right": "image"})
 
-            self.val = SIMPDataset(self.image_dir / "Validation", val_transforms, distortions)
+            self.val = SIMPDataset(self.image_dir / "Validation", val_transforms)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True)

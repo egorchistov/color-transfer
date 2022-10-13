@@ -21,14 +21,12 @@ Links
 -----
 https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 """
-
+import kornia
 import torch
 import pytorch_lightning as pl
 from kornia.metrics import psnr, ssim
-from kornia.color import rgb_to_yuv
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
-from torchvision.transforms.functional import normalize
 
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
@@ -40,6 +38,15 @@ class SIMP(pl.LightningModule):
     def __init__(self, learning_rate=1e-4):
         super().__init__()
         self.learning_rate = learning_rate
+
+        self.distortions = torch.nn.Sequential(
+            kornia.augmentation.RandomPlanckianJitter(),
+            kornia.augmentation.RandomPlasmaBrightness(),
+            kornia.augmentation.RandomPlasmaContrast(),
+            kornia.augmentation.RandomSharpness(),
+            kornia.augmentation.RandomGaussianBlur((3, 3), (0.1, 2.0)),
+            kornia.augmentation.RandomMotionBlur(3, 35., 0.5),
+        )
 
         ###############################################################
         ## scale     #  1  #  1/2  #  1/4  #  1/8  #  1/16  #  1/32  ##
@@ -86,7 +93,9 @@ class SIMP(pl.LightningModule):
         )
 
     def training_step(self, batch, batch_idx):
-        left, left_gt, right = batch
+        left_gt, right = batch
+
+        left = self.distortions(left_gt)
 
         corrected_left, (disp, att, att_cycle, valid_mask) = self(left, right)
 
@@ -95,9 +104,6 @@ class SIMP(pl.LightningModule):
         loss_PAM_P = loss_pam_photometric(left, right, att, valid_mask)
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
         loss_PAM_S = loss_pam_smoothness(att)
-
-        warped_right = warp_disp(right, -disp)
-        valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
 
         loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
@@ -108,17 +114,12 @@ class SIMP(pl.LightningModule):
         self.log("Color Correction Loss", loss_color_correction)
         self.log("Loss", loss)
 
-        if batch_idx == 0 and isinstance(self.logger, WandbLogger):
-            self.logger.log_image(
-                key="Train",
-                images=[left, warped_right, corrected_left.clamp(0, 1), left_gt, right, disp, valid_mask],
-                caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
-                         "Valid Mask"])
-
         return loss
 
     def validation_step(self, batch, batch_idx):
-        left, left_gt, right = batch
+        left_gt, right = batch
+
+        left = self.distortions(left_gt)
 
         corrected_left, (disp, _, _, valid_mask) = self(left, right)
 
