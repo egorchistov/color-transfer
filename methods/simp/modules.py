@@ -75,11 +75,11 @@ class Hourglass(nn.Module):
         self.E5 = B(1, channels[4], channels[4])
 
         self.E5_upsample = Upsample(channels[4], channels[3])
-        self.D4 = B(1, channels[3], channels[3])
+        self.D4 = B(1, 2 * channels[3], channels[3])
         self.D4_upsample = Upsample(channels[3], channels[2])
-        self.D3 = B(1, channels[2], channels[2])
-        self.E3_upsample = Upsample(channels[2], channels[1])
-        self.D2 = B(1, channels[1], channels[1])
+        self.D3 = B(1, 2 * channels[2], channels[2])
+        self.D3_upsample = Upsample(channels[2], channels[1])
+        self.D2 = B(1, 2 * channels[1], channels[1])
 
     def forward(self, x):
         fea_E1 = self.E1(self.E0_downsample(x))
@@ -309,7 +309,7 @@ class Output(nn.Module):
         # valid mask (left image)
         valid_mask_left = torch.sum(att_left2right.detach(), -2) > 0.1
         valid_mask_left = valid_mask_left.view(b, 1, h, w)
-        # valid_mask_left = morphologic_process(valid_mask_left)
+        valid_mask_left = valid_mask_left.float()  # valid_mask_left = morphologic_process(valid_mask_left)
 
         # disparity
         disp = regress_disp(att_right2left, valid_mask_left)
@@ -317,7 +317,7 @@ class Output(nn.Module):
         # valid mask (right image)
         valid_mask_right = torch.sum(att_right2left.detach(), -2) > 0.1
         valid_mask_right = valid_mask_right.view(b, 1, h, w)
-        # valid_mask_right = morphologic_process(valid_mask_right)
+        valid_mask_right = valid_mask_right.float()  # valid_mask_right = morphologic_process(valid_mask_right)
 
         # cycle-attention maps
         att_left2right2left = torch.matmul(att_right2left, att_left2right).view(b, h, w, w)
@@ -339,7 +339,7 @@ class ColorCorrection(pl.LightningModule):
         self.E3_downsample = Downsample(channels[3], channels[4])
         self.E4 = B(1, 3 * channels[4] + 1, channels[4])
         self.E4_downsample = Downsample(channels[4], channels[5])
-        self.E5 = B(1, 3 * channels[5] + 1, channels[5])
+        self.E5 = B(1, channels[5], channels[5])
 
         self.E5_upsample = Upsample(channels[5], channels[4])
         self.D5 = B(1, 2 * channels[4], channels[4])
@@ -350,20 +350,20 @@ class ColorCorrection(pl.LightningModule):
         self.D3_upsample = Upsample(channels[2], channels[1])
         self.D2 = B(1, channels[1], channels[1])
         self.D2_upsample = Upsample(channels[1], channels[0])
-        self.D1 = B(1, 2 * channels[0], channels[0])
+        self.D1 = B(1, channels[0] + 2 * 3, channels[0])
 
         self.output = B(1, channels[0], 3)
 
     def forward(self, fea_left, fea_right, valid_mask, left, warped_right):
         fea_E2 = self.E2(torch.cat((fea_left[-1], fea_right[-1], valid_mask[-1][0]), dim=1))
-        fea_E3 = self.E3(torch.cat((self.E2_downsample(fea_E2), fea_left[-1], fea_right[-1], valid_mask[-1][0]), dim=1))
-        fea_E4 = self.E4(torch.cat((self.E3_downsample(fea_E3), fea_left[-2], fea_right[-2], valid_mask[-2][0]), dim=1))
-        fea_E5 = self.E5(torch.cat((self.E4_downsample(fea_E4), fea_left[-3], fea_right[-3], valid_mask[-3][0]), dim=1))
+        fea_E3 = self.E3(torch.cat((self.E2_downsample(fea_E2), fea_left[-2], fea_right[-2], valid_mask[-2][0]), dim=1))
+        fea_E4 = self.E4(torch.cat((self.E3_downsample(fea_E3), fea_left[-3], fea_right[-3], valid_mask[-3][0]), dim=1))
+        fea_E5 = self.E5(self.E4_downsample(fea_E4))
 
         fea_D5 = self.D5(torch.cat((self.E5_upsample(fea_E5), fea_E4), dim=1))
         fea_D4 = self.D4(torch.cat((self.D5_upsample(fea_D5), fea_E3), dim=1))
         fea_D3 = self.D3(torch.cat((self.D4_upsample(fea_D4), fea_E2), dim=1))
         fea_D2 = self.D2(self.D3_upsample(fea_D3))
-        fea_D1 = self.D1(torch.cat((self.D3_upsample(fea_D2), left, warped_right), dim=1))
+        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), left, warped_right), dim=1))
 
         return self.output(fea_D1)
