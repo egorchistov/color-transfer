@@ -10,7 +10,9 @@ python -m methods.simp.train \
     --img_height=256 \
     --img_width=512  \
     --batch_size=16  \
-    --max_epochs=100
+    --max_epochs=100  \
+    --num_workers=2  \
+    --check_val_every_n_epoch=5
 ```
 
 We use Tesla P100-16GB in our expreriments.
@@ -25,10 +27,8 @@ https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 import torch
 import pytorch_lightning as pl
 from kornia.metrics import psnr, ssim
-from kornia.color import rgb_to_yuv
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
-from torchvision.transforms.functional import normalize
 
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
@@ -96,9 +96,6 @@ class SIMP(pl.LightningModule):
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
         loss_PAM_S = loss_pam_smoothness(att)
 
-        warped_right = warp_disp(right, -disp)
-        valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
-
         loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
         loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
@@ -108,19 +105,13 @@ class SIMP(pl.LightningModule):
         self.log("Color Correction Loss", loss_color_correction)
         self.log("Loss", loss)
 
-        if batch_idx == 0 and isinstance(self.logger, WandbLogger):
-            self.logger.log_image(
-                key="Train",
-                images=[left, warped_right, corrected_left.clamp(0, 1), left_gt, right, disp, valid_mask],
-                caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
-                         "Valid Mask"])
-
         return loss
 
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
         corrected_left, (disp, _, _, valid_mask) = self(left, right)
+        valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
 
         psnr_value = psnr(corrected_left, left_gt, max_val=1)
         ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()
@@ -131,7 +122,7 @@ class SIMP(pl.LightningModule):
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
                 key="Validation",
-                images=[left, warp_disp(right, -disp), corrected_left.clamp(0, 1), left_gt, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")],
+                images=[left, warp_disp(right, -disp), corrected_left.clamp(0, 1), left_gt, right, disp, valid_mask],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right", "Disparity",
                          "Valid Mask"])
 
