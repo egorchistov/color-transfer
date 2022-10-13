@@ -39,12 +39,13 @@ class SIMPDataset(Dataset):
 
 
 class SIMPDataModule(pl.LightningDataModule):
-    def __init__(self, image_dir, batch_size, patch_size):
+    def __init__(self, image_dir, batch_size, patch_size, num_workers):
         super().__init__()
 
         self.image_dir = image_dir
         self.batch_size = batch_size
         self.patch_size = patch_size
+        self.num_workers = num_workers
 
         self.train = None
         self.val = None
@@ -86,10 +87,10 @@ class SIMPDataModule(pl.LightningDataModule):
             self.val = SIMPDataset(self.image_dir / "Validation", val_transforms, distortions)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=4, pin_memory=True)
+        return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=self.num_workers)
 
     def plot_example(self):
         idx = np.random.choice(len(self.train))

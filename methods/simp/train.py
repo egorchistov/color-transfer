@@ -13,13 +13,15 @@ parser.add_argument("--dataset_path", type=str)
 parser.add_argument("--batch_size", type=int)
 parser.add_argument("--img_height", type=int)
 parser.add_argument("--img_width", type=int)
+parser.add_argument("--num_workers", type=int)
 parser = pl.Trainer.add_argparse_args(parser)
 args = parser.parse_args()
 
 datamodule = SIMPDataModule(
     Path(args.dataset_path),
     batch_size=args.batch_size,
-    patch_size=(args.img_height, args.img_width))
+    patch_size=(args.img_height, args.img_width),
+    num_workers=args.num_workers)
 
 model = SIMP()
 
