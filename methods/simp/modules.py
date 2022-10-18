@@ -318,11 +318,17 @@ class ColorCorrection(pl.LightningModule):
     def __init__(self, channels):
         super().__init__()
 
-        self.E2 = B(1, 2 * channels[2] + 1, channels[2])
+        self.input = B(1, 3, channels[0])
+
+        self.E0 = B(1, channels[0], channels[0])
+        self.E0_downsample = Downsample(channels[0], channels[1])
+        self.E1 = B(1, channels[0], channels[1])
+        self.E1_downsample = Downsample(channels[1], channels[2])
+        self.E2 = B(1, channels[2], channels[2])
         self.E2_downsample = Downsample(channels[2], channels[3])
-        self.E3 = B(1, 3 * channels[3] + 1, channels[3])
+        self.E3 = B(1, channels[3], channels[3])
         self.E3_downsample = Downsample(channels[3], channels[4])
-        self.E4 = B(1, 3 * channels[4] + 1, channels[4])
+        self.E4 = B(1, channels[4], channels[4])
         self.E4_downsample = Downsample(channels[4], channels[5])
         self.E5 = B(1, channels[5], channels[5])
 
@@ -333,22 +339,24 @@ class ColorCorrection(pl.LightningModule):
         self.D4_upsample = Upsample(channels[3], channels[2])
         self.D3 = B(1, 2 * channels[2], channels[2])
         self.D3_upsample = Upsample(channels[2], channels[1])
-        self.D2 = B(1, channels[1], channels[1])
+        self.D2 = B(1, 2 * channels[1], channels[1])
         self.D2_upsample = Upsample(channels[1], channels[0])
-        self.D1 = B(1, channels[0] + 2 * 3, channels[0])
+        self.D1 = B(1, 2 * channels[0], channels[0])
 
         self.output = B(1, channels[0], 3)
 
-    def forward(self, fea_left, fea_right, valid_mask, left, warped_right):
-        fea_E2 = self.E2(torch.cat((fea_left[-1], fea_right[-1], valid_mask[-1][0]), dim=1))
-        fea_E3 = self.E3(torch.cat((self.E2_downsample(fea_E2), fea_left[-2], fea_right[-2], valid_mask[-2][0]), dim=1))
-        fea_E4 = self.E4(torch.cat((self.E3_downsample(fea_E3), fea_left[-3], fea_right[-3], valid_mask[-3][0]), dim=1))
+    def forward(self, left, warped_right, valid_mask):
+        fea_E0 = self.E0(self.input(torch.cat((left, warped_right, valid_mask), dim=1)))
+        fea_E1 = self.E1(self.E0_downsample(fea_E0))
+        fea_E2 = self.E2(self.E1_downsample(fea_E1))
+        fea_E3 = self.E3(self.E2_downsample(fea_E2))
+        fea_E4 = self.E4(self.E3_downsample(fea_E3))
         fea_E5 = self.E5(self.E4_downsample(fea_E4))
 
         fea_D5 = self.D5(torch.cat((self.E5_upsample(fea_E5), fea_E4), dim=1))
         fea_D4 = self.D4(torch.cat((self.D5_upsample(fea_D5), fea_E3), dim=1))
         fea_D3 = self.D3(torch.cat((self.D4_upsample(fea_D4), fea_E2), dim=1))
-        fea_D2 = self.D2(self.D3_upsample(fea_D3))
-        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), left, warped_right), dim=1))
+        fea_D2 = self.D2(torch.cat((self.D3_upsample(fea_D3), fea_E1), dim=1))
+        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_E0), dim=1))
 
         return self.output(fea_D1)
