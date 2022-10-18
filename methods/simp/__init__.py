@@ -87,7 +87,7 @@ class SIMP(pl.LightningModule):
         disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(cost_s2, max_disp // 8)
         disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(cost_s3, max_disp // 4)
 
-        disp = 4 * F.interpolate(disp_s3.detach(), scale_factor=4, mode="nearest")
+        disp = 4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest")
         valid_mask = F.interpolate(valid_mask_s3[0].detach(), scale_factor=4, mode="nearest")
         warped_right = warp_disp(right, -disp)
 
