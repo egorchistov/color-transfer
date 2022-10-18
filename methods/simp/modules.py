@@ -318,7 +318,7 @@ class ColorCorrection(pl.LightningModule):
     def __init__(self, channels):
         super().__init__()
 
-        self.input = B(1, 3, channels[0])
+        self.input = B(1, 2 * 3 + 1, channels[0])
 
         self.E0 = B(1, channels[0], channels[0])
         self.E0_downsample = Downsample(channels[0], channels[1])
