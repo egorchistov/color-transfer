@@ -322,7 +322,7 @@ class ColorCorrection(pl.LightningModule):
 
         self.E0 = B(1, channels[0], channels[0])
         self.E0_downsample = Downsample(channels[0], channels[1])
-        self.E1 = B(1, channels[0], channels[1])
+        self.E1 = B(1, channels[1], channels[1])
         self.E1_downsample = Downsample(channels[1], channels[2])
         self.E2 = B(1, channels[2], channels[2])
         self.E2_downsample = Downsample(channels[2], channels[3])
