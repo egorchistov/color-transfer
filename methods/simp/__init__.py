@@ -77,7 +77,7 @@ class SIMP(pl.LightningModule):
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
 
-        (fea_left_s1, fea_left_s2, fea_left_s3), fea_refine = self.hourglass(left)
+        (fea_left_s1, fea_left_s2, fea_left_s3), _ = self.hourglass(left)
         (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.hourglass(right)
 
         cost_s1, cost_s2, cost_s3 = self.cas_pam([fea_left_s1, fea_left_s2, fea_left_s3],
@@ -87,8 +87,8 @@ class SIMP(pl.LightningModule):
         disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(cost_s2, max_disp // 8)
         disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(cost_s3, max_disp // 4)
 
-        disp = 4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest")
-        valid_mask = F.interpolate(valid_mask_s3[0], scale_factor=4, mode="nearest")
+        disp = 4 * F.interpolate(disp_s3.detach(), scale_factor=4, mode="nearest")
+        valid_mask = F.interpolate(valid_mask_s3[0].detach(), scale_factor=4, mode="nearest")
         warped_right = warp_disp(right, -disp)
 
         corrected_left = self.color_correction(left, warped_right, valid_mask)
