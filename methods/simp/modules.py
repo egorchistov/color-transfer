@@ -5,35 +5,22 @@ import pytorch_lightning as pl
 
 
 class ResB(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, in_channels, out_channels):
         super().__init__()
-        self.lrelu = nn.LeakyReLU(0.1, inplace=True)
+
+        self.input = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True))
+
         self.body = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1))
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1))
 
     def forward(self, x):
-        out = self.body(x)
-        return self.lrelu(out + x)
+        x = self.input(x)
 
-
-class B(nn.Module):
-    def __init__(self, n_blocks, channels_in, channels_out):
-        super().__init__()
-        body = []
-        body.append(nn.Sequential(
-            nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1),
-            nn.LeakyReLU(0.1, inplace=True),
-        ))
-        for i in range(n_blocks):
-            body.append(
-                ResB(channels_out)
-            )
-        self.body = nn.Sequential(*body)
-
-    def forward(self, x):
-        return self.body(x)
+        return F.leaky_relu(x + self.body(x), negative_slope=0.1, inplace=True)
 
 
 class Upsample(torch.nn.Module):
@@ -63,22 +50,22 @@ class Hourglass(nn.Module):
         super().__init__()
 
         self.E0_downsample = Downsample(3, channels[0])
-        self.E1 = B(1, channels[0], channels[0])
+        self.E1 = ResB(channels[0], channels[0])
         self.E1_downsample = Downsample(channels[0], channels[1])
-        self.E2 = B(1, channels[1], channels[1])
+        self.E2 = ResB(channels[1], channels[1])
         self.E2_downsample = Downsample(channels[1], channels[2])
-        self.E3 = B(1, channels[2], channels[2])
+        self.E3 = ResB(channels[2], channels[2])
         self.E3_downsample = Downsample(channels[2], channels[3])
-        self.E4 = B(1, channels[3], channels[3])
+        self.E4 = ResB(channels[3], channels[3])
         self.E4_downsample = Downsample(channels[3], channels[4])
-        self.E5 = B(1, channels[4], channels[4])
+        self.E5 = ResB(channels[4], channels[4])
 
         self.E5_upsample = Upsample(channels[4], channels[3])
-        self.D4 = B(1, 2 * channels[3], channels[3])
+        self.D4 = ResB(2 * channels[3], channels[3])
         self.D4_upsample = Upsample(channels[3], channels[2])
-        self.D3 = B(1, 2 * channels[2], channels[2])
+        self.D3 = ResB(2 * channels[2], channels[2])
         self.D3_upsample = Upsample(channels[2], channels[1])
-        self.D2 = B(1, 2 * channels[1], channels[1])
+        self.D2 = ResB(2 * channels[1], channels[1])
 
     def forward(self, x):
         fea_E1 = self.E1(self.E0_downsample(x))
@@ -97,12 +84,7 @@ class Hourglass(nn.Module):
 class PAB(nn.Module):
     def __init__(self, channels):
         super().__init__()
-        self.head = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(0.1, inplace=True),
-        )
+        self.head = ResB(channels, channels)
         self.query = nn.Conv2d(channels, channels, kernel_size=1)
         self.key = nn.Conv2d(channels, channels, kernel_size=1)
 
@@ -318,32 +300,32 @@ class ColorCorrection(pl.LightningModule):
     def __init__(self, channels):
         super().__init__()
 
-        self.input = B(1, 2 * 3 + 1, channels[0])
+        self.input = ResB(2 * 3 + 1, channels[0])
 
-        self.E0 = B(1, channels[0], channels[0])
+        self.E0 = ResB(channels[0], channels[0])
         self.E0_downsample = Downsample(channels[0], channels[1])
-        self.E1 = B(1, channels[1], channels[1])
+        self.E1 = ResB(channels[1], channels[1])
         self.E1_downsample = Downsample(channels[1], channels[2])
-        self.E2 = B(1, channels[2], channels[2])
+        self.E2 = ResB(channels[2], channels[2])
         self.E2_downsample = Downsample(channels[2], channels[3])
-        self.E3 = B(1, channels[3], channels[3])
+        self.E3 = ResB(channels[3], channels[3])
         self.E3_downsample = Downsample(channels[3], channels[4])
-        self.E4 = B(1, channels[4], channels[4])
+        self.E4 = ResB(channels[4], channels[4])
         self.E4_downsample = Downsample(channels[4], channels[5])
-        self.E5 = B(1, channels[5], channels[5])
+        self.E5 = ResB(channels[5], channels[5])
 
         self.E5_upsample = Upsample(channels[5], channels[4])
-        self.D5 = B(1, 2 * channels[4], channels[4])
+        self.D5 = ResB(2 * channels[4], channels[4])
         self.D5_upsample = Upsample(channels[4], channels[3])
-        self.D4 = B(1, 2 * channels[3], channels[3])
+        self.D4 = ResB(2 * channels[3], channels[3])
         self.D4_upsample = Upsample(channels[3], channels[2])
-        self.D3 = B(1, 2 * channels[2], channels[2])
+        self.D3 = ResB(2 * channels[2], channels[2])
         self.D3_upsample = Upsample(channels[2], channels[1])
-        self.D2 = B(1, 2 * channels[1], channels[1])
+        self.D2 = ResB(2 * channels[1], channels[1])
         self.D2_upsample = Upsample(channels[1], channels[0])
-        self.D1 = B(1, 2 * channels[0], channels[0])
+        self.D1 = ResB(2 * channels[0], channels[0])
 
-        self.output = B(1, channels[0], 3)
+        self.output = ResB(channels[0], 3)
 
     def forward(self, left, warped_right, valid_mask):
         fea_E0 = self.E0(self.input(torch.cat((left, warped_right, valid_mask), dim=1)))

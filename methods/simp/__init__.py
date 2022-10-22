@@ -51,7 +51,7 @@ class Distortions(torch.nn.Module):
             kornia.augmentation.RandomMotionBlur(3, 35., 0.5),
             kornia.augmentation.RandomGrayscale(),
             same_on_batch=True,
-            random_apply=2)
+            random_apply=1)
 
     @torch.no_grad()
     def forward(self, x):
@@ -88,7 +88,7 @@ class SIMP(pl.LightningModule):
         disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(cost_s3, max_disp // 4)
 
         disp = 4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest")
-        valid_mask = F.interpolate(valid_mask_s3[0].detach(), scale_factor=4, mode="nearest")
+        valid_mask = F.interpolate(valid_mask_s3[0], scale_factor=4, mode="nearest")
         warped_right = warp_disp(right, -disp)
 
         corrected_left = self.color_correction(left, warped_right, valid_mask)
@@ -109,24 +109,13 @@ class SIMP(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left, (disp, att, att_cycle, valid_mask) = self(left, right)
-
-        loss_P = loss_disp_unsupervised(left, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest"))
-        loss_S = loss_disp_smoothness(disp, left)
-        loss_PAM_P = loss_pam_photometric(left, right, att, valid_mask)
-        loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
-        loss_PAM_S = loss_pam_smoothness(att)
+        corrected_left, _ = self(left, right)
 
         loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
-        loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
-        self.log("Photometric Loss", loss_PAM_P + loss_P)
-        self.log("Smoothness Loss", 0.1 * loss_S + loss_PAM_S)
-        self.log("Cycle Loss", loss_PAM_C)
         self.log("Color Correction Loss", loss_color_correction)
-        self.log("Loss", loss)
 
-        return loss
+        return loss_color_correction
 
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
