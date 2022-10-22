@@ -72,7 +72,7 @@ class SIMP(pl.LightningModule):
         self.hourglass = Hourglass([32, 64, 96, 128, 160])
         self.cas_pam = CascadedPAM([128, 96, 64])
         self.output = Output()
-        # self.color_correction = ColorCorrection([16, 32, 64, 96, 128, 160])
+        self.color_correction = ColorCorrection([16, 32, 64, 96, 128, 160])
 
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
@@ -91,8 +91,7 @@ class SIMP(pl.LightningModule):
         valid_mask = F.interpolate(valid_mask_s3[0], scale_factor=4, mode="nearest")
         warped_right = warp_disp(right, -disp)
 
-        # corrected_left = self.color_correction(left, warped_right, valid_mask)
-        corrected_left = warped_right
+        corrected_left = self.color_correction(left, warped_right, valid_mask)
 
         return corrected_left, (
             disp,

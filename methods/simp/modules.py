@@ -102,7 +102,7 @@ class PAB(nn.Module):
 
         # C_right2left
         Q = self.query(fea_left).permute(0, 2, 3, 1).contiguous()                     # B * H * W * C
-        K = self.key(fea_right).permute(0, 2, 1, 3) .contiguous()                     # B * H * C * W
+        K = self.key(fea_right).permute(0, 2, 1, 3).contiguous()                      # B * H * C * W
         cost_right2left = torch.matmul(Q, K) / c                                      # scale the matching cost
         cost_right2left = cost_right2left + cost[0]
 

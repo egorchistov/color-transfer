@@ -18,7 +18,7 @@ parser = pl.Trainer.add_argparse_args(parser)
 args = parser.parse_args()
 
 datamodule = SIMPDataModule(
-    Path(args.dataset_path),
+    image_dir=Path(args.dataset_path),
     batch_size=args.batch_size,
     patch_size=(args.img_height, args.img_width),
     num_workers=args.num_workers)
