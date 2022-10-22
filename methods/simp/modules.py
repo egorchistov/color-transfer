@@ -15,12 +15,13 @@ class ResB(nn.Module):
         self.body = nn.Sequential(
             nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
             nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1))
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True))
 
     def forward(self, x):
         x = self.input(x)
 
-        return F.leaky_relu(x + self.body(x), negative_slope=0.1, inplace=True)
+        return x + self.body(x)
 
 
 class Upsample(torch.nn.Module):
@@ -28,7 +29,7 @@ class Upsample(torch.nn.Module):
         super().__init__()
         self.upsample = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.LeakyReLU(0.1, inplace=True))
+            nn.LeakyReLU(negative_slope=0.1, inplace=True))
 
     def forward(self, x):
         return self.upsample(x)
@@ -39,7 +40,7 @@ class Downsample(torch.nn.Module):
         super().__init__()
         self.downsample = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),
-            nn.LeakyReLU(0.1, inplace=True))
+            nn.LeakyReLU(negative_slope=0.1, inplace=True))
 
     def forward(self, x):
         return self.downsample(x)
@@ -118,7 +119,7 @@ class PAB(nn.Module):
 
 class PAM_stage(nn.Module):
     def __init__(self, channels):
-        super(PAM_stage, self).__init__()
+        super().__init__()
         self.pab1 = PAB(channels)
         self.pab2 = PAB(channels)
         self.pab3 = PAB(channels)
@@ -143,12 +144,12 @@ class CascadedPAM(nn.Module):
         # bottleneck in stage 2
         self.b2 = nn.Sequential(
             nn.Conv2d(128 + 96, 96, 1, 1, 0),
-            nn.LeakyReLU(0.1, inplace=True)
+            nn.LeakyReLU(negative_slope=0.1, inplace=True)
         )
         # bottleneck in stage 3
         self.b3 = nn.Sequential(
             nn.Conv2d(96 + 64, 64, 1, 1, 0),
-            nn.LeakyReLU(0.1, inplace=True)
+            nn.LeakyReLU(negative_slope=0.1, inplace=True)
         )
 
     def forward(self, fea_left, fea_right):
