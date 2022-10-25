@@ -106,14 +106,10 @@ class PAM(nn.Module):
 
         self.pab1 = PAB(channels, bn)
         self.pab2 = PAB(channels, bn)
-        self.pab3 = PAB(channels, bn)
-        self.pab4 = PAB(channels, bn)
 
     def forward(self, fea_left, fea_right):
         fea_left, fea_right, cost = self.pab1(fea_left, fea_right)
         fea_left, fea_right, cost = self.pab2(fea_left, fea_right, cost)
-        fea_left, fea_right, cost = self.pab3(fea_left, fea_right, cost)
-        fea_left, fea_right, cost = self.pab4(fea_left, fea_right, cost)
 
         return cost
 
