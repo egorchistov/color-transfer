@@ -453,6 +453,6 @@ class ConvGuidedColorCorrection(pl.LightningModule):
         var_x = self.box_filter(x * x) / N - mean_x * mean_x
 
         A = self.conv_a(cov_xy, var_x, valid_mask)
-        b = torch.mean(mean_y - A * mean_x, dim=[-1, -2])
+        b = mean_y - A * mean_x
 
-        return A * x + b
+        return A * x + b.mean(dim=[-1, -2], keepdim=True)
