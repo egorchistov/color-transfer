@@ -29,7 +29,7 @@ wandb_logger = WandbLogger(project="simp", log_model="all")
 
 checkpoint = pl.callbacks.ModelCheckpoint(
     monitor="Loss",
-    every_n_epochs=5,
+    every_n_epochs=25,
     save_top_k=-1)
 
 trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint], logger=wandb_logger)

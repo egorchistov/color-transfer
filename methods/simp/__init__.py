@@ -26,7 +26,6 @@ https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 """
 
 import torch
-import kornia
 import pytorch_lightning as pl
 from kornia.metrics import psnr, ssim
 import torch.nn.functional as F
@@ -38,31 +37,10 @@ from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_
 from methods.simp.modules import Hourglass, CascadedPAM, Output, ColorCorrection
 
 
-class Distortions(torch.nn.Module):
-    def __init__(self):
-        super().__init__()
-
-        self.distortions = kornia.augmentation.container.AugmentationSequential(
-            kornia.augmentation.RandomPlanckianJitter(),
-            kornia.augmentation.RandomPlasmaBrightness(),
-            kornia.augmentation.RandomPlasmaContrast(),
-            kornia.augmentation.RandomSharpness(),
-            kornia.augmentation.RandomGaussianBlur((3, 3), (0.1, 2.0)),
-            kornia.augmentation.RandomMotionBlur(3, 35., 0.5),
-            kornia.augmentation.RandomGrayscale(),
-            same_on_batch=True,
-            random_apply=1)
-
-    @torch.no_grad()
-    def forward(self, x):
-        return self.distortions(x)
-
-
 class SIMP(pl.LightningModule):
     def __init__(self, learning_rate=1e-4):
         super().__init__()
         self.learning_rate = learning_rate
-        self.distortions = Distortions()
 
         ###############################################################
         ## scale     #  1  #  1/2  #  1/4  #  1/8  #  1/16  #  1/32  ##
@@ -100,12 +78,6 @@ class SIMP(pl.LightningModule):
             [valid_mask_s1, valid_mask_s2, valid_mask_s3]
         )
 
-    def on_after_batch_transfer(self, batch, dataloader_idx):
-        left_gt, right = batch
-        left = self.distortions(left_gt)
-
-        return left, left_gt, right
-
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
@@ -117,13 +89,14 @@ class SIMP(pl.LightningModule):
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
         loss_PAM_S = loss_pam_smoothness(att)
 
-        # loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
-        loss = loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
+        loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
+        loss = loss_color_correction + loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C
 
         self.log("Photometric Loss", loss_PAM_P + loss_P)
         self.log("Smoothness Loss", 0.1 * loss_S + loss_PAM_S)
         self.log("Cycle Loss", loss_PAM_C)
-        # self.log("Color Correction Loss", loss_color_correction)
+        self.log("Color Correction Loss", loss_color_correction)
+
         self.log("Loss", loss)
 
         return loss
