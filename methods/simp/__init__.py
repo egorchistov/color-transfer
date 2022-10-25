@@ -34,7 +34,7 @@ from pytorch_lightning.loggers import WandbLogger
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
     loss_disp_unsupervised
-from methods.simp.modules import Encoder, PAB, Decoder, Hourglass, output
+from methods.simp.modules import Encoder, PAB, Hourglass, output
 
 
 class SIMP(pl.LightningModule):
@@ -42,15 +42,14 @@ class SIMP(pl.LightningModule):
         super().__init__()
         self.learning_rate = learning_rate
 
-        ############################################
-        ## scale     #  1  #  1/2  #  1/4  #  1/8 ##
-        ## channels  #  16 #  32   #  64   #  96  ##
-        ############################################
+        ####################################
+        ## scale     #  1  #  1/2  #  1/4 ##
+        ## channels  #  32 #  64   #  96  ##
+        ####################################
 
-        self.feature_extractor = Encoder([3, 16, 32, 64, 96], bn=True)
-        self.correlation = PAB(96, bn=True)
-        # self.disparity_upscaler = Decoder([1, 96, 64, 32, 16, 1], bn=True)
-        self.color_correction = Hourglass([6, 16, 32, 64, 96, 3], bn=False)
+        self.feature_extractor = Encoder([3, 32, 64, 96], bn=True)
+        self.correlation = PAB(64, bn=True)
+        self.color_correction = Hourglass([6, 32, 64, 96, 3], bn=False)
 
     def forward(self, left, right):
         b, _, h, w = left.shape
@@ -61,8 +60,7 @@ class SIMP(pl.LightningModule):
         cost_volume = self.correlation(left_features, right_features)
         disp, att, att_cycle, valid_mask = output(cost_volume)
 
-        # disp = 8 * self.disparity_upscaler(disp)
-        disp = 8 * F.interpolate(disp, scale_factor=8, mode="bilinear")
+        disp = 4 * F.interpolate(disp, scale_factor=4)
         warped_right = warp_disp(right, -disp)
 
         corrected_left = self.color_correction(torch.cat([left, warped_right], dim=1))
@@ -74,7 +72,7 @@ class SIMP(pl.LightningModule):
 
         corrected_left, (disp, att, att_cycle, valid_mask) = self(left, right)
 
-        loss_P = loss_disp_unsupervised(left, right, disp, F.interpolate(valid_mask[0], scale_factor=8))
+        loss_P = loss_disp_unsupervised(left, right, disp, F.interpolate(valid_mask[0], scale_factor=4))
         loss_S = loss_disp_smoothness(disp, left)
         loss_PAM_P = loss_pam_photometric(left, right, att, valid_mask)
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
@@ -96,7 +94,7 @@ class SIMP(pl.LightningModule):
         left, left_gt, right = batch
 
         corrected_left, (disp, _, _, valid_mask) = self(left, right)
-        valid_mask = F.interpolate(valid_mask[0], scale_factor=8)
+        valid_mask = F.interpolate(valid_mask[0], scale_factor=4)
 
         psnr_value = psnr(corrected_left, left_gt, max_val=1)
         ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()

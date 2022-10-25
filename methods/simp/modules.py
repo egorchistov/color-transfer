@@ -62,9 +62,7 @@ class Encoder(nn.Module):
             Downsample(channels[1], channels[2], bn=bn),
             B(channels[2], channels[2], bn=bn),
             Downsample(channels[2], channels[3], bn=bn),
-            B(channels[3], channels[3], bn=bn),
-            Downsample(channels[3], channels[4], bn=bn),
-            B(channels[4], channels[4], bn=bn))
+            B(channels[3], channels[3], bn=bn))
 
     def forward(self, x):
         return self.encoder(x)
@@ -174,23 +172,6 @@ def output(cost):
         (valid_mask_left, valid_mask_right)
 
 
-class Decoder(nn.Module):
-    def __init__(self, channels, bn):
-        super().__init__()
-
-        self.decoder = nn.Sequential(
-            B(channels[0], channels[1], bn=bn),
-            Upsample(channels[1], channels[2], bn=bn),
-            B(channels[2], channels[2], bn=bn),
-            Upsample(channels[2], channels[3], bn=bn),
-            B(channels[3], channels[3], bn=bn),
-            Upsample(channels[3], channels[4], bn=bn),
-            B(channels[4], channels[5], bn=bn))
-
-    def forward(self, x):
-        return self.decoder(x)
-
-
 class Hourglass(pl.LightningModule):
     def __init__(self, channels, bn):
         super().__init__()
@@ -199,26 +180,20 @@ class Hourglass(pl.LightningModule):
         self.E0_downsample = Downsample(channels[1], channels[2], bn=bn)
         self.E1 = B(channels[2], channels[2], bn=bn)
         self.E1_downsample = Downsample(channels[2], channels[3], bn=bn)
+
         self.E2 = B(channels[3], channels[3], bn=bn)
-        self.E2_downsample = Downsample(channels[3], channels[4], bn=bn)
 
-        self.E3 = B(channels[4], channels[4], bn=bn)
-
-        self.E3_upsample = Upsample(channels[4], channels[3], bn=bn)
-        self.D2 = B(2 * channels[3], channels[3], bn=bn)
-        self.D2_upsample = Upsample(channels[3], channels[2], bn=bn)
+        self.E2_upsample = Upsample(channels[3], channels[2], bn=bn)
         self.D1 = B(2 * channels[2], channels[2], bn=bn)
         self.D1_upsample = Upsample(channels[2], channels[1], bn=bn)
-        self.D0 = B(2 * channels[1], channels[5], bn=bn)
+        self.D0 = B(2 * channels[1], channels[4], bn=bn)
 
     def forward(self, x):
         fea_E0 = self.E0(x)
         fea_E1 = self.E1(self.E0_downsample(fea_E0))
         fea_E2 = self.E2(self.E1_downsample(fea_E1))
-        fea_E3 = self.E3(self.E2_downsample(fea_E2))
 
-        fea_D2 = self.D2(torch.cat((self.E3_upsample(fea_E3), fea_E2), dim=1))
-        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_E1), dim=1))
+        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_E2), fea_E1), dim=1))
         fea_D0 = self.D0(torch.cat((self.D1_upsample(fea_D1), fea_E0), dim=1))
 
         return fea_D0
