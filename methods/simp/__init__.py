@@ -49,7 +49,7 @@ class SIMP(pl.LightningModule):
 
         self.feature_extractor = Encoder([3, 16, 32, 64, 96], bn=True)
         self.correlation = PAB(96, bn=True)
-        self.disparity_upscaler = Decoder([1, 96, 64, 32, 16, 1], bn=True)
+        # self.disparity_upscaler = Decoder([1, 96, 64, 32, 16, 1], bn=True)
         self.color_correction = Hourglass([6, 16, 32, 64, 96, 3], bn=False)
 
     def forward(self, left, right):
@@ -61,7 +61,8 @@ class SIMP(pl.LightningModule):
         cost_volume = self.correlation(left_features, right_features)
         disp, att, att_cycle, valid_mask = output(cost_volume)
 
-        disp = 8 * self.disparity_upscaler(disp)
+        # disp = 8 * self.disparity_upscaler(disp)
+        disp = 8 * F.interpolate(disp, scale_factor=8, mode="bilinear")
         warped_right = warp_disp(right, -disp)
 
         corrected_left = self.color_correction(torch.cat([left, warped_right], dim=1))
