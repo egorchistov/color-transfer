@@ -75,11 +75,15 @@ class PAB(nn.Module):
     def __init__(self, channels, bn):
         super().__init__()
 
+        self.head = B(channels, channels, bn=bn)
         self.query = B(channels, channels, bn=bn)
         self.key = B(channels, channels, bn=bn)
 
-    def forward(self, fea_left, fea_right):
+    def forward(self, fea_left, fea_right, cost=None):
         c = fea_left.shape[1]
+
+        fea_left = self.head(fea_left)
+        fea_right = self.head(fea_right)
 
         query = self.query(fea_left).permute(0, 2, 3, 1).contiguous()  # B * H * W * C
         key = self.key(fea_right).permute(0, 2, 1, 3).contiguous()  # B * H * C * W
@@ -89,7 +93,11 @@ class PAB(nn.Module):
         key = self.key(fea_left).permute(0, 2, 1, 3).contiguous()  # B * H * C * W
         cost_left2right = torch.matmul(query, key) / c  # scale the matching cost
 
-        return [cost_right2left, cost_left2right]
+        if cost is not None:
+            cost_right2left += cost[0]
+            cost_left2right += cost[1]
+
+        return fea_left, fea_right, [cost_right2left, cost_left2right]
 
 
 class PAM(nn.Module):
@@ -102,13 +110,10 @@ class PAM(nn.Module):
         self.pab4 = PAB(channels, bn)
 
     def forward(self, fea_left, fea_right):
-        cost1 = self.pab1(fea_left, fea_right)
-        cost2 = self.pab2(fea_left, fea_right)
-        cost3 = self.pab3(fea_left, fea_right)
-        cost4 = self.pab4(fea_left, fea_right)
-
-        cost = [cost1[0] + cost2[0] + cost3[0] + cost4[0],
-                cost1[1] + cost2[1] + cost3[1] + cost4[1]]
+        fea_left, fea_right, cost = self.pab1(fea_left, fea_right)
+        fea_left, fea_right, cost = self.pab2(fea_left, fea_right, cost)
+        fea_left, fea_right, cost = self.pab3(fea_left, fea_right, cost)
+        fea_left, fea_right, cost = self.pab4(fea_left, fea_right, cost)
 
         return cost
 
