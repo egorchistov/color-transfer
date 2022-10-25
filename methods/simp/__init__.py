@@ -122,6 +122,5 @@ class SIMP(pl.LightningModule):
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=25, gamma=0.1)
 
-        return [optimizer], [scheduler]
+        return [optimizer]
