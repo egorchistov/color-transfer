@@ -34,7 +34,7 @@ from pytorch_lightning.loggers import WandbLogger
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
     loss_disp_unsupervised
-from methods.simp.modules import Hourglass, CascadedPAM, Output, ColorCorrection, ConvGuidedColorCorrection
+from methods.simp.modules import Encoder, PAB, Decoder, Hourglass, output
 
 
 class SIMP(pl.LightningModule):
@@ -42,48 +42,38 @@ class SIMP(pl.LightningModule):
         super().__init__()
         self.learning_rate = learning_rate
 
-        ###############################################################
-        ## scale     #  1  #  1/2  #  1/4  #  1/8  #  1/16  #  1/32  ##
-        ## channels  #  16 #  32   #  64   #  96   #  128   #  160   ##
-        ###############################################################
+        ############################################
+        ## scale     #  1  #  1/2  #  1/4  #  1/8 ##
+        ## channels  #  16 #  32   #  64   #  96  ##
+        ############################################
 
-        self.hourglass = Hourglass([32, 64, 96, 128, 160])
-        self.cas_pam = CascadedPAM([128, 96, 64])
-        self.output = Output()
-        self.color_correction = ConvGuidedColorCorrection()
+        self.feature_extractor = Encoder([3, 16, 32, 64, 96], bn=True)
+        self.correlation = PAB(96, bn=True)
+        self.disparity_upscaler = Decoder([1, 96, 64, 32, 16, 1], bn=True)
+        self.color_correction = Hourglass([6, 16, 32, 64, 96, 3], bn=False)
 
-    def forward(self, left, right, max_disp=0):
+    def forward(self, left, right):
         b, _, h, w = left.shape
 
-        (fea_left_s1, fea_left_s2, fea_left_s3), _ = self.hourglass(left)
-        (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.hourglass(right)
+        left_features = self.feature_extractor(left)
+        right_features = self.feature_extractor(right)
 
-        cost_s1, cost_s2, cost_s3 = self.cas_pam([fea_left_s1, fea_left_s2, fea_left_s3],
-                                                 [fea_right_s1, fea_right_s2, fea_right_s3])
+        cost_volume = self.correlation(left_features, right_features)
+        disp, att, att_cycle, valid_mask = output(cost_volume)
 
-        disp_s1, att_s1, att_cycle_s1, valid_mask_s1 = self.output(cost_s1, max_disp // 16)
-        disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(cost_s2, max_disp // 8)
-        disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(cost_s3, max_disp // 4)
-
-        disp = 4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest")
-        valid_mask = F.interpolate(valid_mask_s3[0], scale_factor=4, mode="nearest")
+        disp = self.disparity_upscaler(disp)
         warped_right = warp_disp(right, -disp)
 
-        corrected_left = self.color_correction(left, warped_right, valid_mask)
+        corrected_left = self.color_correction(torch.cat([left, warped_right], dim=1))
 
-        return corrected_left, (
-            disp,
-            [att_s1, att_s2, att_s3],
-            [att_cycle_s1, att_cycle_s2, att_cycle_s3],
-            [valid_mask_s1, valid_mask_s2, valid_mask_s3]
-        )
+        return corrected_left, (disp, att, att_cycle, valid_mask)
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
         corrected_left, (disp, att, att_cycle, valid_mask) = self(left, right)
 
-        loss_P = loss_disp_unsupervised(left, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest"))
+        loss_P = loss_disp_unsupervised(left, right, disp, F.interpolate(valid_mask[0], scale_factor=8))
         loss_S = loss_disp_smoothness(disp, left)
         loss_PAM_P = loss_pam_photometric(left, right, att, valid_mask)
         loss_PAM_C = loss_pam_cycle(att_cycle, valid_mask)
@@ -105,7 +95,7 @@ class SIMP(pl.LightningModule):
         left, left_gt, right = batch
 
         corrected_left, (disp, _, _, valid_mask) = self(left, right)
-        valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
+        valid_mask = F.interpolate(valid_mask[0], scale_factor=4)
 
         psnr_value = psnr(corrected_left, left_gt, max_val=1)
         ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()

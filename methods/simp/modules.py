@@ -1,247 +1,94 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from skimage import morphology
 import pytorch_lightning as pl
 
 
-class ResB(nn.Module):
-    def __init__(self, channels):
+class B(nn.Module):
+    def __init__(self, in_channels, out_channels, bn):
         super().__init__()
-        self.lrelu = nn.LeakyReLU(0.1, inplace=True)
+
+        self.input = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1, bias=not bn),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True))
+
         self.body = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels))
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=not bn),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1, bias=not bn),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True))
 
     def forward(self, x):
-        out = self.body(x)
-        return self.lrelu(out + x)
+        x = self.input(x)
+
+        return x + self.body(x)
 
 
-class EncoderB(nn.Module):
-    def __init__(self, n_blocks, channels_in, channels_out, downsample=False):
+class Upsample(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, bn):
         super().__init__()
-        body = []
-        if downsample:
-            body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(channels_out),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
-        if not downsample:
-            body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1, bias=False),
-                nn.BatchNorm2d(channels_out),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
-        for i in range(n_blocks):
-            body.append(
-                ResB(channels_out)
-            )
-        self.body = nn.Sequential(*body)
+
+        self.upsample = nn.Sequential(
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1, bias=not bn),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True))
 
     def forward(self, x):
-        return self.body(x)
+        return self.upsample(x)
 
 
-class DecoderB(nn.Module):
-    def __init__(self, n_blocks, channels_in, channels_out):
+class Downsample(torch.nn.Module):
+    def __init__(self, in_channels, out_channels, bn):
         super().__init__()
-        body = []
-        body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=1, bias=False),
-                nn.BatchNorm2d(channels_out),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
-        for i in range(n_blocks):
-            body.append(
-                ResB(channels_out)
-            )
-        self.body = nn.Sequential(*body)
+
+        self.downsample = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, bias=not bn),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
+            nn.LeakyReLU(negative_slope=0.1, inplace=True))
 
     def forward(self, x):
-        return self.body(x)
+        return self.downsample(x)
 
 
-class Hourglass(nn.Module):
-    def __init__(self, channels):
+class Encoder(nn.Module):
+    def __init__(self, channels, bn):
         super().__init__()
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
-        self.E0 = EncoderB(1,           3, channels[0], downsample=True)               # scale: 1/2
-        self.E1 = EncoderB(1, channels[0], channels[1], downsample=True)               # scale: 1/4
-        self.E2 = EncoderB(1, channels[1], channels[2], downsample=True)               # scale: 1/8
-        self.E3 = EncoderB(1, channels[2], channels[3], downsample=True)               # scale: 1/16
-        self.E4 = EncoderB(1, channels[3], channels[4], downsample=True)               # scale: 1/32
-
-        self.D0 = EncoderB(1, channels[4], channels[4], downsample=False)              # scale: 1/32
-        self.D1 = DecoderB(1, channels[4] + channels[3], channels[3])                  # scale: 1/16
-        self.D2 = DecoderB(1, channels[3] + channels[2], channels[2])                  # scale: 1/8
-        self.D3 = DecoderB(1, channels[2] + channels[1], channels[1])                  # scale: 1/4
+        self.encoder = nn.Sequential(
+            B(channels[0], channels[1], bn=bn),
+            Downsample(channels[1], channels[2], bn=bn),
+            B(channels[2], channels[2], bn=bn),
+            Downsample(channels[2], channels[3], bn=bn),
+            B(channels[3], channels[3], bn=bn),
+            Downsample(channels[3], channels[4], bn=bn),
+            B(channels[4], channels[4], bn=bn))
 
     def forward(self, x):
-        fea_E0 = self.E0(x)                                                            # scale: 1/2
-        fea_E1 = self.E1(fea_E0)                                                       # scale: 1/4
-        fea_E2 = self.E2(fea_E1)                                                       # scale: 1/8
-        fea_E3 = self.E3(fea_E2)                                                       # scale: 1/16
-        fea_E4 = self.E4(fea_E3)                                                       # scale: 1/32
-
-        fea_D0 = self.D0(fea_E4)                                                       # scale: 1/32
-        fea_D1 = self.D1(torch.cat((self.upsample(fea_D0), fea_E3), 1))                # scale: 1/16
-        fea_D2 = self.D2(torch.cat((self.upsample(fea_D1), fea_E2), 1))                # scale: 1/8
-        fea_D3 = self.D3(torch.cat((self.upsample(fea_D2), fea_E1), 1))                # scale: 1/4
-
-        return (fea_D1, fea_D2, fea_D3), fea_E1
+        return self.encoder(x)
 
 
 class PAB(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, channels, bn):
         super().__init__()
-        self.head = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
-            nn.LeakyReLU(0.1, inplace=True),
-        )
-        self.query = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(channels),
-        )
-        self.key = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, bias=False),
-            nn.BatchNorm2d(channels),
-        )
 
-    def forward(self, x_left, x_right, cost):
-        """
-        :param x_left:      features from the left image  (B * C * H * W)
-        :param x_right:     features from the right image (B * C * H * W)
-        :param cost:        input matching cost           (B * H * W * W)
-        """
-
-        b, c, h, w = x_left.shape
-        fea_left = self.head(x_left)
-        fea_right = self.head(x_right)
-
-        # C_right2left
-        Q = self.query(fea_left).permute(0, 2, 3, 1).contiguous()                     # B * H * W * C
-        K = self.key(fea_right).permute(0, 2, 1, 3) .contiguous()                     # B * H * C * W
-        cost_right2left = torch.matmul(Q, K) / c                                      # scale the matching cost
-        cost_right2left = cost_right2left + cost[0]
-
-        # C_left2right
-        Q = self.query(fea_right).permute(0, 2, 3, 1).contiguous()                    # B * H * W * C
-        K = self.key(fea_left).permute(0, 2, 1, 3).contiguous()                       # B * H * C * W
-        cost_left2right = torch.matmul(Q, K) / c                                      # scale the matching cost
-        cost_left2right = cost_left2right + cost[1]
-
-        return x_left + fea_left, \
-            x_right + fea_right, \
-            (cost_right2left, cost_left2right)
-
-
-class PAM_stage(nn.Module):
-    def __init__(self, channels):
-        super(PAM_stage, self).__init__()
-        self.pab1 = PAB(channels)
-        self.pab2 = PAB(channels)
-        self.pab3 = PAB(channels)
-        self.pab4 = PAB(channels)
-
-    def forward(self, fea_left, fea_right, cost):
-        fea_left, fea_right, cost = self.pab1(fea_left, fea_right, cost)
-        fea_left, fea_right, cost = self.pab2(fea_left, fea_right, cost)
-        fea_left, fea_right, cost = self.pab3(fea_left, fea_right, cost)
-        fea_left, fea_right, cost = self.pab4(fea_left, fea_right, cost)
-
-        return fea_left, fea_right, cost
-
-
-class CascadedPAM(nn.Module):
-    def __init__(self, channels):
-        super(CascadedPAM, self).__init__()
-        self.stage1 = PAM_stage(channels[0])
-        self.stage2 = PAM_stage(channels[1])
-        self.stage3 = PAM_stage(channels[2])
-
-        # bottleneck in stage 2
-        self.b2 = nn.Sequential(
-            nn.Conv2d(128 + 96, 96, 1, 1, 0, bias=True),
-            nn.BatchNorm2d(96),
-            nn.LeakyReLU(0.1, inplace=True)
-        )
-        # bottleneck in stage 3
-        self.b3 = nn.Sequential(
-            nn.Conv2d(96 + 64, 64, 1, 1, 0, bias=True),
-            nn.BatchNorm2d(64),
-            nn.LeakyReLU(0.1, inplace=True)
-        )
+        self.query = B(channels, channels, bn=bn)
+        self.key = B(channels, channels, bn=bn)
 
     def forward(self, fea_left, fea_right):
-        """
-        :param fea_left:    feature list [fea_left_s1, fea_left_s2, fea_left_s3]
-        :param fea_right:   feature list [fea_right_s1, fea_right_s2, fea_right_s3]
-        """
-        fea_left_s1, fea_left_s2, fea_left_s3 = fea_left
-        fea_right_s1, fea_right_s2, fea_right_s3 = fea_right
+        c = fea_left.shape[1]
 
-        b, _, h_s1, w_s1 = fea_left_s1.shape
-        b, _, h_s2, w_s2 = fea_left_s2.shape
+        query = self.query(fea_left).permute(0, 2, 3, 1).contiguous()  # B * H * W * C
+        key = self.key(fea_right).permute(0, 2, 1, 3).contiguous()  # B * H * C * W
+        cost_right2left = torch.matmul(query, key) / c  # scale the matching cost
 
-        # stage 1: 1/16
-        cost_s0 = [
-            torch.zeros(b, h_s1, w_s1, w_s1).to(fea_right_s1.device),
-            torch.zeros(b, h_s1, w_s1, w_s1).to(fea_right_s1.device)
-        ]
+        query = self.query(fea_right).permute(0, 2, 3, 1).contiguous()  # B * H * W * C
+        key = self.key(fea_left).permute(0, 2, 1, 3).contiguous()  # B * H * C * W
+        cost_left2right = torch.matmul(query, key) / c  # scale the matching cost
 
-        fea_left, fea_right, cost_s1 = self.stage1(fea_left_s1, fea_right_s1, cost_s0)
-
-        # stage 2: 1/8
-        fea_left = F.interpolate(fea_left, scale_factor=2, mode='bilinear')
-        fea_right = F.interpolate(fea_right, scale_factor=2, mode='bilinear')
-        fea_left = self.b2(torch.cat((fea_left, fea_left_s2), 1))
-        fea_right = self.b2(torch.cat((fea_right, fea_right_s2), 1))
-
-        cost_s1_up = [
-            F.interpolate(cost_s1[0].view(b, 1, h_s1, w_s1, w_s1), scale_factor=2, mode='trilinear').squeeze(1),
-            F.interpolate(cost_s1[1].view(b, 1, h_s1, w_s1, w_s1), scale_factor=2, mode='trilinear').squeeze(1)
-        ]
-
-        fea_left, fea_right, cost_s2 = self.stage2(fea_left, fea_right, cost_s1_up)
-
-        # stage 3: 1/4
-        fea_left = F.interpolate(fea_left, scale_factor=2, mode='bilinear')
-        fea_right = F.interpolate(fea_right, scale_factor=2, mode='bilinear')
-        fea_left = self.b3(torch.cat((fea_left, fea_left_s3), 1))
-        fea_right = self.b3(torch.cat((fea_right, fea_right_s3), 1))
-
-        cost_s2_up = [
-            F.interpolate(cost_s2[0].view(b, 1, h_s2, w_s2, w_s2), scale_factor=2, mode='trilinear').squeeze(1),
-            F.interpolate(cost_s2[1].view(b, 1, h_s2, w_s2, w_s2), scale_factor=2, mode='trilinear').squeeze(1)
-        ]
-
-        fea_left, fea_right, cost_s3 = self.stage3(fea_left, fea_right, cost_s2_up)
-
-        return [cost_s1, cost_s2, cost_s3]
-
-
-def morphologic_process(mask):
-    b, _, _, _ = mask.shape
-    mask = ~mask
-    mask_np = mask.cpu().numpy().astype(bool)
-    mask_np = morphology.remove_small_objects(mask_np, 20, 2)
-    mask_np = morphology.remove_small_holes(mask_np, 10, 2)
-    for idx in range(b):
-        mask_np[idx, 0, :, :] = morphology.binary_closing(mask_np[idx, 0, :, :], morphology.disk(3))
-    mask_np = 1 - mask_np
-    mask_np = mask_np.astype(float)
-
-    return torch.from_numpy(mask_np).float().to(mask.device)
+        return [cost_right2left, cost_left2right]
 
 
 def regress_disp(att, valid_mask):
@@ -288,171 +135,90 @@ def regress_disp(att, valid_mask):
     return disp_ini * valid_mask + disp * (1 - valid_mask)
 
 
-class Output(nn.Module):
-    def __init__(self):
+def output(cost):
+    cost_right2left, cost_left2right = cost
+    b, h, w, _ = cost_right2left.shape
+
+    # M_right2left
+    # exclude negative disparities
+    cost_right2left = torch.tril(cost_right2left)
+    cost_right2left = torch.exp(cost_right2left - cost_right2left.max(-1)[0].unsqueeze(-1))
+    cost_right2left = torch.tril(cost_right2left)
+    att_right2left = cost_right2left / (cost_right2left.sum(-1, keepdim=True) + 1e-8)
+
+    # M_left2right
+    # exclude negative disparities
+    cost_left2right = torch.triu(cost_left2right)
+    cost_left2right = torch.exp(cost_left2right - cost_left2right.max(-1)[0].unsqueeze(-1))
+    cost_left2right = torch.triu(cost_left2right)
+    att_left2right = cost_left2right / (cost_left2right.sum(-1, keepdim=True) + 1e-8)
+
+    # valid mask (left image)
+    valid_mask_left = torch.sum(att_left2right.detach(), -2) > 0.1
+    valid_mask_left = valid_mask_left.view(b, 1, h, w).float()
+
+    # disparity
+    disp = regress_disp(att_right2left, valid_mask_left)
+
+    # valid mask (right image)
+    valid_mask_right = torch.sum(att_right2left.detach(), -2) > 0.1
+    valid_mask_right = valid_mask_right.view(b, 1, h, w).float()
+
+    # cycle-attention maps
+    att_left2right2left = torch.matmul(att_right2left, att_left2right).view(b, h, w, w)
+    att_right2left2right = torch.matmul(att_left2right, att_right2left).view(b, h, w, w)
+
+    return disp, \
+        (att_right2left.view(b, h, w, w), att_left2right.view(b, h, w, w)), \
+        (att_left2right2left, att_right2left2right), \
+        (valid_mask_left, valid_mask_right)
+
+
+class Decoder(nn.Module):
+    def __init__(self, channels, bn):
         super().__init__()
 
-    def forward(self, cost, max_disp):
-        cost_right2left, cost_left2right = cost
-        b, h, w, _ = cost_right2left.shape
-
-        # M_right2left
-        # exclude negative disparities & disparities larger than max_disp (if available)
-        cost_right2left = torch.tril(cost_right2left)
-        if max_disp > 0:
-            cost_right2left = cost_right2left - torch.tril(cost_right2left, -max_disp)
-        cost_right2left = torch.exp(cost_right2left - cost_right2left.max(-1)[0].unsqueeze(-1))
-        cost_right2left = torch.tril(cost_right2left)
-        if max_disp > 0:
-            cost_right2left = cost_right2left - torch.tril(cost_right2left, -max_disp)
-        att_right2left = cost_right2left / (cost_right2left.sum(-1, keepdim=True) + 1e-8)
-
-        # M_left2right
-        # exclude negative disparities & disparities larger than max_disp (if available)
-        cost_left2right = torch.triu(cost_left2right)
-        if max_disp > 0:
-            cost_left2right = cost_left2right - torch.triu(cost_left2right, max_disp)
-        cost_left2right = torch.exp(cost_left2right - cost_left2right.max(-1)[0].unsqueeze(-1))
-        cost_left2right = torch.triu(cost_left2right)
-        if max_disp > 0:
-            cost_left2right = cost_left2right - torch.triu(cost_left2right, max_disp)
-        att_left2right = cost_left2right / (cost_left2right.sum(-1, keepdim=True) + 1e-8)
-
-        # valid mask (left image)
-        valid_mask_left = torch.sum(att_left2right.detach(), -2) > 0.1
-        valid_mask_left = valid_mask_left.view(b, 1, h, w)
-        valid_mask_left = morphologic_process(valid_mask_left)
-
-        # disparity
-        disp = regress_disp(att_right2left, valid_mask_left)
-
-        # valid mask (right image)
-        valid_mask_right = torch.sum(att_right2left.detach(), -2) > 0.1
-        valid_mask_right = valid_mask_right.view(b, 1, h, w)
-        valid_mask_right = morphologic_process(valid_mask_right)
-
-        # cycle-attention maps
-        att_left2right2left = torch.matmul(att_right2left, att_left2right).view(b, h, w, w)
-        att_right2left2right = torch.matmul(att_left2right, att_right2left).view(b, h, w, w)
-
-        return disp, \
-            (att_right2left.view(b, h, w, w), att_left2right.view(b, h, w, w)), \
-            (att_left2right2left, att_right2left2right), \
-            (valid_mask_left, valid_mask_right)
-
-
-class B(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-
-        self.input = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True))
-
-        self.body = nn.Sequential(
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True))
+        self.decoder = nn.Sequential(
+            B(channels[0], channels[1], bn=bn),
+            Upsample(channels[1], channels[2], bn=bn),
+            B(channels[2], channels[2], bn=bn),
+            Upsample(channels[2], channels[3], bn=bn),
+            B(channels[3], channels[3], bn=bn),
+            Upsample(channels[3], channels[4], bn=bn),
+            B(channels[4], channels[5], bn=bn))
 
     def forward(self, x):
-        x = self.input(x)
-
-        return x + self.body(x)
+        return self.decoder(x)
 
 
-class Upsample(torch.nn.Module):
-    def __init__(self, in_channels, out_channels):
+class Hourglass(pl.LightningModule):
+    def __init__(self, channels, bn):
         super().__init__()
-        self.upsample = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True))
+
+        self.E0 = B(channels[0], channels[1], bn=bn)
+        self.E0_downsample = Downsample(channels[1], channels[2], bn=bn)
+        self.E1 = B(channels[2], channels[2], bn=bn)
+        self.E1_downsample = Downsample(channels[2], channels[3], bn=bn)
+        self.E2 = B(channels[3], channels[3], bn=bn)
+        self.E2_downsample = Downsample(channels[3], channels[4], bn=bn)
+
+        self.E3 = B(channels[4], channels[4], bn=bn)
+
+        self.E3_upsample = Upsample(channels[4], channels[3], bn=bn)
+        self.D2 = B(2 * channels[3], channels[3], bn=bn)
+        self.D2_upsample = Upsample(channels[3], channels[2], bn=bn)
+        self.D1 = B(2 * channels[2], channels[2], bn=bn)
+        self.D1_upsample = Upsample(channels[2], channels[1], bn=bn)
+        self.D0 = B(2 * channels[1], channels[5], bn=bn)
 
     def forward(self, x):
-        return self.upsample(x)
-
-
-class Downsample(torch.nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.downsample = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),
-            nn.BatchNorm2d(out_channels),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True))
-
-    def forward(self, x):
-        return self.downsample(x)
-
-
-class ColorCorrection(pl.LightningModule):
-    def __init__(self, channels):
-        super().__init__()
-
-        self.input = B(2 * 3 + 1, channels[0])
-
-        self.E0 = B(channels[0], channels[0])
-        self.E0_downsample = Downsample(channels[0], channels[1])
-        self.E1 = B(channels[1], channels[1])
-        self.E1_downsample = Downsample(channels[1], channels[2])
-        self.E2 = B(channels[2], channels[2])
-        self.E2_downsample = Downsample(channels[2], channels[3])
-        self.E3 = B(channels[3], channels[3])
-        self.E3_downsample = Downsample(channels[3], channels[4])
-        self.E4 = B(channels[4], channels[4])
-        self.E4_downsample = Downsample(channels[4], channels[5])
-        self.E5 = B(channels[5], channels[5])
-
-        self.E5_upsample = Upsample(channels[5], channels[4])
-        self.D5 = B(2 * channels[4], channels[4])
-        self.D5_upsample = Upsample(channels[4], channels[3])
-        self.D4 = B(2 * channels[3], channels[3])
-        self.D4_upsample = Upsample(channels[3], channels[2])
-        self.D3 = B(2 * channels[2], channels[2])
-        self.D3_upsample = Upsample(channels[2], channels[1])
-        self.D2 = B(2 * channels[1], channels[1])
-        self.D2_upsample = Upsample(channels[1], channels[0])
-        self.D1 = B(2 * channels[0], channels[0])
-
-        self.output = B(channels[0], 3)
-
-    def forward(self, left, warped_right, valid_mask):
-        fea_E0 = self.E0(self.input(torch.cat((left, warped_right, valid_mask), dim=1)))
+        fea_E0 = self.E0(x)
         fea_E1 = self.E1(self.E0_downsample(fea_E0))
         fea_E2 = self.E2(self.E1_downsample(fea_E1))
         fea_E3 = self.E3(self.E2_downsample(fea_E2))
-        fea_E4 = self.E4(self.E3_downsample(fea_E3))
-        fea_E5 = self.E5(self.E4_downsample(fea_E4))
 
-        fea_D5 = self.D5(torch.cat((self.E5_upsample(fea_E5), fea_E4), dim=1))
-        fea_D4 = self.D4(torch.cat((self.D5_upsample(fea_D5), fea_E3), dim=1))
-        fea_D3 = self.D3(torch.cat((self.D4_upsample(fea_D4), fea_E2), dim=1))
-        fea_D2 = self.D2(torch.cat((self.D3_upsample(fea_D3), fea_E1), dim=1))
-        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_E0), dim=1))
+        fea_D2 = self.D2(torch.cat((self.E3_upsample(fea_E3), fea_E2), dim=1))
+        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_E1), dim=1))
+        fea_D0 = self.D0(torch.cat((self.D1_upsample(fea_D1), fea_E0), dim=1))
 
-        return self.output(fea_D1)
-
-
-class ConvGuidedColorCorrection(pl.LightningModule):
-    def __init__(self, radius=1):
-        super().__init__()
-
-        self.box_filter = nn.Conv2d(3, 3, kernel_size=3, padding=radius, dilation=radius, bias=False, groups=3)
-        self.box_filter.weight.data[...] = 1.0
-
-        self.conv_a = ColorCorrection([16, 32, 64, 96, 128, 160])
-
-    def forward(self, x, y, valid_mask):
-        _, _, h, w = x.shape
-
-        N = self.box_filter(torch.ones_like(x))
-
-        mean_x = self.box_filter(x) / N
-        mean_y = self.box_filter(y) / N
-
-        cov_xy = self.box_filter(x * y) / N - mean_x * mean_y
-        var_x = self.box_filter(x * x) / N - mean_x * mean_x
-
-        A = self.conv_a(cov_xy, var_x, valid_mask)
-        b = mean_y - A * mean_x
-
-        return A * x + b.mean(dim=[-1, -2], keepdim=True)
+        return fea_D0
