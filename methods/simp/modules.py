@@ -377,6 +377,7 @@ class Downsample(torch.nn.Module):
         super().__init__()
         self.downsample = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(out_channels),
             nn.LeakyReLU(negative_slope=0.1, inplace=True))
 
     def forward(self, x):
@@ -454,4 +455,4 @@ class ConvGuidedColorCorrection(pl.LightningModule):
         A = self.conv_a(cov_xy, var_x, valid_mask)
         b = mean_y - A * mean_x
 
-        return A * x + b
+        return A * x + b, b

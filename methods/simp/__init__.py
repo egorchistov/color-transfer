@@ -69,19 +69,20 @@ class SIMP(pl.LightningModule):
         valid_mask = F.interpolate(valid_mask_s3[0], scale_factor=4, mode="nearest")
         warped_right = warp_disp(right, -disp)
 
-        corrected_left = self.color_correction(left, warped_right, valid_mask)
+        corrected_left, bias = self.color_correction(left, warped_right, valid_mask)
 
         return corrected_left, (
             disp,
             [att_s1, att_s2, att_s3],
             [att_cycle_s1, att_cycle_s2, att_cycle_s3],
-            [valid_mask_s1, valid_mask_s2, valid_mask_s3]
+            [valid_mask_s1, valid_mask_s2, valid_mask_s3],
+            bias
         )
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left, (disp, att, att_cycle, valid_mask) = self(left, right)
+        corrected_left, (disp, att, att_cycle, valid_mask, bias) = self(left, right)
 
         loss_P = loss_disp_unsupervised(left, right, disp, F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest"))
         loss_S = loss_disp_smoothness(disp, left)
@@ -90,12 +91,14 @@ class SIMP(pl.LightningModule):
         loss_PAM_S = loss_pam_smoothness(att)
 
         loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
-        loss = loss_color_correction + 0.005 * (loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C)
+        loss_bias_regularization = bias.std()
+        loss = loss_color_correction + loss_bias_regularization + 0.005 * (loss_P + 0.1 * loss_S + loss_PAM_P + loss_PAM_S + loss_PAM_C)
 
         self.log("Photometric Loss", 0.005 * (loss_PAM_P + loss_P))
         self.log("Smoothness Loss", 0.005 * (0.1 * loss_S + loss_PAM_S))
         self.log("Cycle Loss", 0.005 * loss_PAM_C)
         self.log("Color Correction Loss", loss_color_correction)
+        self.log("Bias Regularization Loss", loss_bias_regularization)
 
         self.log("Loss", loss)
 
@@ -104,7 +107,7 @@ class SIMP(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left, (disp, _, _, valid_mask) = self(left, right)
+        corrected_left, (disp, _, _, valid_mask, _) = self(left, right)
         valid_mask = F.interpolate(valid_mask[-1][0], scale_factor=4, mode="nearest")
 
         psnr_value = psnr(corrected_left, left_gt, max_val=1)
