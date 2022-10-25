@@ -428,4 +428,30 @@ class ColorCorrection(pl.LightningModule):
         fea_D2 = self.D2(torch.cat((self.D3_upsample(fea_D3), fea_E1), dim=1))
         fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_E0), dim=1))
 
-        return left + self.output(fea_D1)
+        return self.output(fea_D1)
+
+
+class ConvGuidedColorCorrection(pl.LightningModule):
+    def __init__(self, radius=1):
+        super().__init__()
+
+        self.box_filter = nn.Conv2d(3, 3, kernel_size=3, padding=radius, dilation=radius, bias=False, groups=3)
+        self.box_filter.weight.data[...] = 1.0
+
+        self.conv_a = ColorCorrection([16, 32, 64, 96, 128, 160])
+
+    def forward(self, x, y, valid_mask):
+        _, _, h, w = x.shape
+
+        N = self.box_filter(torch.ones_like(x))
+
+        mean_x = self.box_filter(x) / N
+        mean_y = self.box_filter(y) / N
+
+        cov_xy = self.box_filter(x * y) / N - mean_x * mean_y
+        var_x = self.box_filter(x * x) / N - mean_x * mean_x
+
+        A = self.conv_a(torch.cat([cov_xy, var_x, valid_mask], dim=1))
+        b = mean_y - A * mean_x
+
+        return A * x + b

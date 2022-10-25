@@ -34,7 +34,7 @@ from pytorch_lightning.loggers import WandbLogger
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
     loss_disp_unsupervised
-from methods.simp.modules import Hourglass, CascadedPAM, Output, ColorCorrection
+from methods.simp.modules import Hourglass, CascadedPAM, Output, ColorCorrection, ConvGuidedColorCorrection
 
 
 class SIMP(pl.LightningModule):
@@ -50,7 +50,7 @@ class SIMP(pl.LightningModule):
         self.hourglass = Hourglass([32, 64, 96, 128, 160])
         self.cas_pam = CascadedPAM([128, 96, 64])
         self.output = Output()
-        self.color_correction = ColorCorrection([16, 32, 64, 96, 128, 160])
+        self.color_correction = ConvGuidedColorCorrection()
 
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
