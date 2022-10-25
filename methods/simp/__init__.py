@@ -44,12 +44,12 @@ class SIMP(pl.LightningModule):
 
         ####################################
         ## scale     #  1  #  1/2  #  1/4 ##
-        ## channels  #  32 #  64   #  96  ##
+        ## channels  #  16 #  32   #  64  ##
         ####################################
 
-        self.feature_extractor = Encoder([3, 32, 64, 96], bn=True)
-        self.correlation = PAM(96, bn=True)
-        self.color_correction = Hourglass([6, 32, 64, 96, 3], bn=False)
+        self.feature_extractor = Encoder([3, 16, 32, 64], bn=True)
+        self.correlation = PAM(64, bn=True)
+        self.color_correction = Hourglass([6, 16, 32, 64, 3], bn=False)
 
     def forward(self, left, right):
         b, _, h, w = left.shape
