@@ -428,4 +428,4 @@ class ColorCorrection(pl.LightningModule):
         fea_D2 = self.D2(torch.cat((self.D3_upsample(fea_D3), fea_E1), dim=1))
         fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_E0), dim=1))
 
-        return self.output(fea_D1)
+        return left + self.output(fea_D1)
