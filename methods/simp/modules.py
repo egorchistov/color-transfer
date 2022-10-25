@@ -143,12 +143,14 @@ class CascadedPAM(nn.Module):
 
         # bottleneck in stage 2
         self.b2 = nn.Sequential(
-            nn.Conv2d(128 + 96, 96, 1, 1, 0),
+            nn.Conv2d(128 + 96, 96, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(96),
             nn.LeakyReLU(negative_slope=0.1, inplace=True)
         )
         # bottleneck in stage 3
         self.b3 = nn.Sequential(
-            nn.Conv2d(96 + 64, 64, 1, 1, 0),
+            nn.Conv2d(96 + 64, 64, 1, 1, 0, bias=False),
+            nn.BatchNorm2d(64),
             nn.LeakyReLU(negative_slope=0.1, inplace=True)
         )
 
