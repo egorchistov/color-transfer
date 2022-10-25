@@ -34,7 +34,7 @@ from pytorch_lightning.loggers import WandbLogger
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
     loss_disp_unsupervised
-from methods.simp.modules import Encoder, PAB, Hourglass, output
+from methods.simp.modules import Encoder, PAM, Hourglass, output
 
 
 class SIMP(pl.LightningModule):
@@ -48,7 +48,7 @@ class SIMP(pl.LightningModule):
         ####################################
 
         self.feature_extractor = Encoder([3, 32, 64, 96], bn=True)
-        self.correlation = PAB(96, bn=True)
+        self.correlation = PAM(96, bn=True)
         self.color_correction = Hourglass([6, 32, 64, 96, 3], bn=False)
 
     def forward(self, left, right):

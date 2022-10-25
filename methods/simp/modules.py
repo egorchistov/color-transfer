@@ -59,9 +59,12 @@ class Encoder(nn.Module):
 
         self.encoder = nn.Sequential(
             B(channels[0], channels[1], bn=bn),
+            B(channels[1], channels[1], bn=bn),
             Downsample(channels[1], channels[2], bn=bn),
             B(channels[2], channels[2], bn=bn),
+            B(channels[2], channels[2], bn=bn),
             Downsample(channels[2], channels[3], bn=bn),
+            B(channels[3], channels[3], bn=bn),
             B(channels[3], channels[3], bn=bn))
 
     def forward(self, x):
@@ -87,6 +90,27 @@ class PAB(nn.Module):
         cost_left2right = torch.matmul(query, key) / c  # scale the matching cost
 
         return [cost_right2left, cost_left2right]
+
+
+class PAM(nn.Module):
+    def __init__(self, channels, bn):
+        super().__init__()
+
+        self.pab1 = PAB(channels, bn)
+        self.pab2 = PAB(channels, bn)
+        self.pab3 = PAB(channels, bn)
+        self.pab4 = PAB(channels, bn)
+
+    def forward(self, fea_left, fea_right):
+        cost1 = self.pab1(fea_left, fea_right)
+        cost2 = self.pab2(fea_left, fea_right)
+        cost3 = self.pab3(fea_left, fea_right)
+        cost4 = self.pab4(fea_left, fea_right)
+
+        cost = [cost1[0] + cost2[0] + cost3[0] + cost4[0],
+                cost1[1] + cost2[1] + cost3[1] + cost4[1]]
+
+        return cost
 
 
 def regress_disp(att, valid_mask):
@@ -176,23 +200,31 @@ class Hourglass(pl.LightningModule):
     def __init__(self, channels, bn):
         super().__init__()
 
-        self.E0 = B(channels[0], channels[1], bn=bn)
-        self.E0_downsample = Downsample(channels[1], channels[2], bn=bn)
-        self.E1 = B(channels[2], channels[2], bn=bn)
-        self.E1_downsample = Downsample(channels[2], channels[3], bn=bn)
-
-        self.E2 = B(channels[3], channels[3], bn=bn)
+        self.E0 = nn.Sequential(
+            B(channels[0], channels[1], bn=bn),
+            B(channels[1], channels[1], bn=bn))
+        self.E1 = nn.Sequential(
+            Downsample(channels[1], channels[2], bn=bn),
+            B(channels[2], channels[2], bn=bn),
+            B(channels[2], channels[2], bn=bn))
+        self.E2 = nn.Sequential(
+            Downsample(channels[2], channels[3], bn=bn),
+            B(channels[3], channels[3], bn=bn),
+            B(channels[3], channels[3], bn=bn))
 
         self.D2_upsample = Upsample(channels[3], channels[2], bn=bn)
-        self.D1 = B(2 * channels[2], channels[2], bn=bn)
+        self.D1 = nn.Sequential(
+            B(2 * channels[2], channels[2], bn=bn),
+            B(channels[2], channels[2], bn=bn))
         self.D1_upsample = Upsample(channels[2], channels[1], bn=bn)
-        self.D0 = B(2 * channels[1], channels[4], bn=bn)
+        self.D0 = nn.Sequential(
+            B(2 * channels[1], channels[1], bn=bn),
+            B(channels[1], channels[4], bn=bn))
 
     def forward(self, x):
         fea_E0 = self.E0(x)
-        fea_E1 = self.E1(self.E0_downsample(fea_E0))
-        fea_E2 = self.E2(self.E1_downsample(fea_E1))
-
+        fea_E1 = self.E1(fea_E0)
+        fea_E2 = self.E2(fea_E1)
         fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_E2), fea_E1), dim=1))
         fea_D0 = self.D0(torch.cat((self.D1_upsample(fea_D1), fea_E0), dim=1))
 
