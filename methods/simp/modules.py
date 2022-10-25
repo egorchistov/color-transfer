@@ -183,7 +183,7 @@ class Hourglass(pl.LightningModule):
 
         self.E2 = B(channels[3], channels[3], bn=bn)
 
-        self.E2_upsample = Upsample(channels[3], channels[2], bn=bn)
+        self.D2_upsample = Upsample(channels[3], channels[2], bn=bn)
         self.D1 = B(2 * channels[2], channels[2], bn=bn)
         self.D1_upsample = Upsample(channels[2], channels[1], bn=bn)
         self.D0 = B(2 * channels[1], channels[4], bn=bn)
