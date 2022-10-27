@@ -12,25 +12,24 @@ from torch.utils.data import Dataset
 
 
 class SIMPDataset(Dataset):
-    def __init__(self, image_dir: Path, transforms, distortions):
+    def __init__(self, image_dir: Path, transforms):
         """First distortions are applied to the left image, then transforms are applied to both"""
 
         self.lefts = sorted(image_dir.glob("*_L.png"))
+        self.left_gts = sorted(image_dir.glob("*_L_GT.png"))
         self.rights = sorted(image_dir.glob("*_R.png"))
 
         assert len(self.lefts) == len(self.rights)
 
         self.transforms = transforms
-        self.distortions = distortions
 
     def __len__(self):
         return len(self.lefts)
 
     def __getitem__(self, index):
-        left_gt = np.array(Image.open(self.lefts[index]).convert("RGB"))
+        left = np.array(Image.open(self.lefts[index]).convert("RGB"))
+        left_gt = np.array(Image.open(self.left_gts[index]).convert("RGB"))
         right = np.array(Image.open(self.rights[index]).convert("RGB"))
-
-        left = self.distortions(image=left_gt)["image"]
 
         t = self.transforms(image=left, left_gt=left_gt, right=right)
         left, left_gt, right = t["image"], t["left_gt"], t["right"]
@@ -75,7 +74,7 @@ class SIMPDataModule(pl.LightningDataModule):
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
 
-            self.train = SIMPDataset(self.image_dir / "Train", train_transforms, distortions)
+            self.train = SIMPDataset(self.image_dir / "Train", train_transforms)
 
             val_transforms = A.Compose([
                 A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
@@ -84,7 +83,7 @@ class SIMPDataModule(pl.LightningDataModule):
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
 
-            self.val = SIMPDataset(self.image_dir / "Validation", val_transforms, distortions)
+            self.val = SIMPDataset(self.image_dir / "Validation", val_transforms)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
