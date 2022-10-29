@@ -15,9 +15,9 @@ class SIMPDataset(Dataset):
     def __init__(self, image_dir: Path, transforms):
         """First distortions are applied to the left image, then transforms are applied to both"""
 
-        self.lefts = sorted(image_dir.glob("*_L.png"))
-        self.left_gts = sorted(image_dir.glob("*_L_GT.png"))
-        self.rights = sorted(image_dir.glob("*_R.png"))
+        self.lefts = sorted(image_dir.glob("*/*_L.png"))
+        self.left_gts = sorted(image_dir.glob("*/*_L_GT.png"))
+        self.rights = sorted(image_dir.glob("*/*_R.png"))
 
         assert len(self.lefts) == len(self.rights)
 
