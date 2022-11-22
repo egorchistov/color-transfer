@@ -1,0 +1,13 @@
+opencv-python
+scikit-image
+tqdm
+matplotlib
+albumentations
+numpy
+scipy
+torch
+kornia
+pytorch_lightning
+torchvision
+pillow
+wandb
