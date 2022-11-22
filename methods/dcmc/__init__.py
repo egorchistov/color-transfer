@@ -57,7 +57,7 @@ def deep_color_mismatch_correction(target, reference):
     """
 
     run = wandb.init()
-    artifact = run.use_artifact("egorchistov/dcmc/model-3e2qi9lr:v100", type="model")
+    artifact = run.use_artifact("egorchistov/dcmc/model-30bwc35r:v19", type="model")
     artifact_dir = artifact.download()
     model = DCMC.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
 
