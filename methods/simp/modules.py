@@ -71,7 +71,8 @@ class Hourglass(nn.Module):
         super().__init__()
         self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
 
-        self.E0 = EncoderB(1,           3, channels[0], downsample=True)               # scale: 1/2
+        self.identity = EncoderB(1, 3, channels[0], downsample=False)                  # scale: 1
+        self.E0 = EncoderB(1, channels[0], channels[0], downsample=True)               # scale: 1/2
         self.E1 = EncoderB(1, channels[0], channels[1], downsample=True)               # scale: 1/4
         self.E2 = EncoderB(1, channels[1], channels[2], downsample=True)               # scale: 1/8
         self.E3 = EncoderB(1, channels[2], channels[3], downsample=True)               # scale: 1/16
@@ -83,7 +84,8 @@ class Hourglass(nn.Module):
         self.D3 = DecoderB(1, channels[2] + channels[1], channels[1])                  # scale: 1/4
 
     def forward(self, x):
-        fea_E0 = self.E0(x)                                                            # scale: 1/2
+        fea_identity = self.identity(x)                                                # scale: 1
+        fea_E0 = self.E0(fea_identity)                                                 # scale: 1/2
         fea_E1 = self.E1(fea_E0)                                                       # scale: 1/4
         fea_E2 = self.E2(fea_E1)                                                       # scale: 1/8
         fea_E3 = self.E3(fea_E2)                                                       # scale: 1/16
@@ -94,7 +96,7 @@ class Hourglass(nn.Module):
         fea_D2 = self.D2(torch.cat((self.upsample(fea_D1), fea_E2), 1))                # scale: 1/8
         fea_D3 = self.D3(torch.cat((self.upsample(fea_D2), fea_E1), 1))                # scale: 1/4
 
-        return (fea_D1, fea_D2, fea_D3), fea_E1
+        return (fea_D1, fea_D2, fea_D3), (fea_identity, fea_E0, fea_E1, fea_E2, fea_E3, fea_E4)
 
 
 class PAB(nn.Module):
@@ -372,60 +374,31 @@ class Upsample(torch.nn.Module):
         return self.upsample(x)
 
 
-class Downsample(torch.nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-        self.downsample = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True))
-
-    def forward(self, x):
-        return self.downsample(x)
-
-
 class ColorCorrection(pl.LightningModule):
     def __init__(self, channels):
         super().__init__()
 
-        self.input = B(2 * 3 + 1, channels[0])
+        self.E5_upsample = Upsample(2 * channels[5], 2 * channels[4])
+        self.D5 = B(4 * channels[4], 2 * channels[4])
+        self.D5_upsample = Upsample(2 * channels[4], 2 * channels[3])
+        self.D4 = B(4 * channels[3], 2 * channels[3])
+        self.D4_upsample = Upsample(2 * channels[3], 2 * channels[2])
+        self.D3 = B(4 * channels[2], 2 * channels[2])
+        self.D3_upsample = Upsample(2 * channels[2], 2 * channels[1])
+        self.D2 = B(4 * channels[1], 2 * channels[1])
+        self.D2_upsample = Upsample(2 * channels[1], 2 * channels[0])
+        self.D1 = B(2 * channels[0] + 64, 2 * channels[0])
 
-        self.E0 = B(channels[0], channels[0])
-        self.E0_downsample = Downsample(channels[0], channels[1])
-        self.E1 = B(channels[1], channels[1])
-        self.E1_downsample = Downsample(channels[1], channels[2])
-        self.E2 = B(channels[2], channels[2])
-        self.E2_downsample = Downsample(channels[2], channels[3])
-        self.E3 = B(channels[3], channels[3])
-        self.E3_downsample = Downsample(channels[3], channels[4])
-        self.E4 = B(channels[4], channels[4])
-        self.E4_downsample = Downsample(channels[4], channels[5])
-        self.E5 = B(channels[5], channels[5])
+        self.output = B(2 * channels[0], 3)
 
-        self.E5_upsample = Upsample(channels[5], channels[4])
-        self.D5 = B(2 * channels[4], channels[4])
-        self.D5_upsample = Upsample(channels[4], channels[3])
-        self.D4 = B(2 * channels[3], channels[3])
-        self.D4_upsample = Upsample(channels[3], channels[2])
-        self.D3 = B(2 * channels[2], channels[2])
-        self.D3_upsample = Upsample(channels[2], channels[1])
-        self.D2 = B(2 * channels[1], channels[1])
-        self.D2_upsample = Upsample(channels[1], channels[0])
-        self.D1 = B(2 * channels[0], channels[0])
+    def forward(self, left, warped_right):
+        fea_identity, fea_E0, fea_E1, fea_E2, fea_E3, fea_E4 = [
+            torch.cat([fea_left, fea_right], dim=1) for fea_left, fea_right in zip(left, warped_right)]
 
-        self.output = B(channels[0], 3)
-
-    def forward(self, left, warped_right, valid_mask):
-        fea_E0 = self.E0(self.input(torch.cat((left, warped_right, valid_mask), dim=1)))
-        fea_E1 = self.E1(self.E0_downsample(fea_E0))
-        fea_E2 = self.E2(self.E1_downsample(fea_E1))
-        fea_E3 = self.E3(self.E2_downsample(fea_E2))
-        fea_E4 = self.E4(self.E3_downsample(fea_E3))
-        fea_E5 = self.E5(self.E4_downsample(fea_E4))
-
-        fea_D5 = self.D5(torch.cat((self.E5_upsample(fea_E5), fea_E4), dim=1))
-        fea_D4 = self.D4(torch.cat((self.D5_upsample(fea_D5), fea_E3), dim=1))
-        fea_D3 = self.D3(torch.cat((self.D4_upsample(fea_D4), fea_E2), dim=1))
-        fea_D2 = self.D2(torch.cat((self.D3_upsample(fea_D3), fea_E1), dim=1))
-        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_E0), dim=1))
+        fea_D5 = self.D5(torch.cat((self.E5_upsample(fea_E4), fea_E3), dim=1))
+        fea_D4 = self.D4(torch.cat((self.D5_upsample(fea_D5), fea_E2), dim=1))
+        fea_D3 = self.D3(torch.cat((self.D4_upsample(fea_D4), fea_E1), dim=1))
+        fea_D2 = self.D2(torch.cat((self.D3_upsample(fea_D3), fea_E0), dim=1))
+        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_identity), dim=1))
 
         return self.output(fea_D1)

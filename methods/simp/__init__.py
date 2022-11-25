@@ -55,8 +55,8 @@ class SIMP(pl.LightningModule):
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
 
-        (fea_left_s1, fea_left_s2, fea_left_s3), _ = self.hourglass(left)
-        (fea_right_s1, fea_right_s2, fea_right_s3), _ = self.hourglass(right)
+        (fea_left_s1, fea_left_s2, fea_left_s3), fea_encoder_left = self.hourglass(left)
+        (fea_right_s1, fea_right_s2, fea_right_s3), fea_encoder_right = self.hourglass(right)
 
         cost_s1, cost_s2, cost_s3 = self.cas_pam([fea_left_s1, fea_left_s2, fea_left_s3],
                                                  [fea_right_s1, fea_right_s2, fea_right_s3])
@@ -64,15 +64,22 @@ class SIMP(pl.LightningModule):
         disp_s1, att_s1, att_cycle_s1, valid_mask_s1 = self.output(cost_s1, max_disp // 16)
         disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(cost_s2, max_disp // 8)
         disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(cost_s3, max_disp // 4)
+        disp_s4 = 2 * F.interpolate(disp_s3, scale_factor=2, mode="nearest")
+        disp_s5 = 2 * F.interpolate(disp_s4, scale_factor=2, mode="nearest")
 
-        disp = 4 * F.interpolate(disp_s3, scale_factor=4, mode="nearest")
-        valid_mask = F.interpolate(valid_mask_s3[0], scale_factor=4, mode="nearest")
-        warped_right = warp_disp(right, -disp)
+        disp_s0 = 0.5 * F.interpolate(disp_s1, scale_factor=0.5, mode="nearest")
 
-        corrected_left = self.color_correction(left, warped_right, valid_mask)
+        fea_encoder_warped_right = [
+            warp_disp(image.detach(), -disp.detach()) for image, disp in zip(
+                fea_encoder_right,
+                [disp_s5, disp_s4, disp_s3, disp_s2, disp_s1, disp_s0]
+            )
+        ]
+
+        corrected_left = self.color_correction(fea_encoder_left, fea_encoder_warped_right)
 
         return corrected_left, (
-            disp,
+            disp_s5,
             [att_s1, att_s2, att_s3],
             [att_cycle_s1, att_cycle_s2, att_cycle_s3],
             [valid_mask_s1, valid_mask_s2, valid_mask_s3]
