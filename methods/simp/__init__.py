@@ -70,7 +70,7 @@ class SIMP(pl.LightningModule):
         disp_s0 = 0.5 * F.interpolate(disp_s1, scale_factor=0.5, mode="nearest")
 
         fea_encoder_warped_right = [
-            warp_disp(image, -disp) for image, disp in zip(
+            warp_disp(image.detach(), -disp.detach()) for image, disp in zip(
                 fea_encoder_right,
                 [disp_s5, disp_s4, disp_s3, disp_s2, disp_s1, disp_s0]
             )
