@@ -13,15 +13,15 @@ class BasicBlock(nn.Module):
             self.upsample = None
 
         self.body = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
             nn.ReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity()
         )
 
         self.shortcut = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, bias=False),
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity()
         )
 
