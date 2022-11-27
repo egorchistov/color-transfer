@@ -5,98 +5,67 @@ from skimage import morphology
 import pytorch_lightning as pl
 
 
-class ResB(nn.Module):
-    def __init__(self, channels):
+class BasicBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, stride=1, scale_factor=1):
         super().__init__()
-        self.lrelu = nn.LeakyReLU(0.1, inplace=True)
+        if scale_factor != 1:
+            self.upsample = nn.Upsample(scale_factor=scale_factor, mode="bilinear", align_corners=False)
+        else:
+            self.upsample = None
+
         self.body = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
-            nn.LeakyReLU(0.1, inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels))
+            nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
+            nn.BatchNorm2d(out_channels)
+        )
+
+        self.shortcut = nn.Sequential(
+            nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, bias=False),
+            nn.BatchNorm2d(out_channels)
+        )
+
+        self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        out = self.body(x)
-        return self.lrelu(out + x)
+        if self.upsample is not None:
+            x = self.upsample(x)
+
+        return self.relu(self.shortcut(x) + self.body(x))
 
 
-class EncoderB(nn.Module):
-    def __init__(self, n_blocks, channels_in, channels_out, downsample=False):
+class FeatureExtration(nn.Module):
+    def __init__(self):
         super().__init__()
-        body = []
-        if downsample:
-            body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=3, stride=2, padding=1, bias=False),
-                nn.BatchNorm2d(channels_out),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
-        if not downsample:
-            body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=3, padding=1, bias=False),
-                nn.BatchNorm2d(channels_out),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
-        for i in range(n_blocks):
-            body.append(
-                ResB(channels_out)
-            )
-        self.body = nn.Sequential(*body)
+
+        self.encoder = nn.Sequential(
+            BasicBlock(3, 16),
+            BasicBlock(16, 32, stride=2),
+            BasicBlock(32, 64, stride=2),
+            BasicBlock(64, 96, stride=2),
+            BasicBlock(96, 128, stride=2),
+            BasicBlock(128, 160, stride=2)
+        )
+
+        self.decoder = nn.Sequential(
+            BasicBlock(160, 128, scale_factor=2),
+            BasicBlock(128, 96, scale_factor=2),
+            BasicBlock(96, 64, scale_factor=2)
+        )
 
     def forward(self, x):
-        return self.body(x)
+        features = []
 
+        for layer in self.encoder:
+            x = layer(x)
+            features.append(x)
 
-class DecoderB(nn.Module):
-    def __init__(self, n_blocks, channels_in, channels_out):
-        super().__init__()
-        body = []
-        body.append(nn.Sequential(
-                nn.Conv2d(channels_in, channels_out, kernel_size=1, bias=False),
-                nn.BatchNorm2d(channels_out),
-                nn.LeakyReLU(0.1, inplace=True),
-            ))
-        for i in range(n_blocks):
-            body.append(
-                ResB(channels_out)
-            )
-        self.body = nn.Sequential(*body)
+        for layer in self.decoder:
+            x = layer(x)
+            features.append(x)
 
-    def forward(self, x):
-        return self.body(x)
-
-
-class Hourglass(nn.Module):
-    def __init__(self, channels):
-        super().__init__()
-        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear', align_corners=False)
-
-        self.identity = EncoderB(1, 3, channels[0], downsample=False)                  # scale: 1
-        self.E0 = EncoderB(1, channels[0], channels[0], downsample=True)               # scale: 1/2
-        self.E1 = EncoderB(1, channels[0], channels[1], downsample=True)               # scale: 1/4
-        self.E2 = EncoderB(1, channels[1], channels[2], downsample=True)               # scale: 1/8
-        self.E3 = EncoderB(1, channels[2], channels[3], downsample=True)               # scale: 1/16
-        self.E4 = EncoderB(1, channels[3], channels[4], downsample=True)               # scale: 1/32
-
-        self.D0 = EncoderB(1, channels[4], channels[4], downsample=False)              # scale: 1/32
-        self.D1 = DecoderB(1, channels[4] + channels[3], channels[3])                  # scale: 1/16
-        self.D2 = DecoderB(1, channels[3] + channels[2], channels[2])                  # scale: 1/8
-        self.D3 = DecoderB(1, channels[2] + channels[1], channels[1])                  # scale: 1/4
-
-    def forward(self, x):
-        fea_identity = self.identity(x)                                                # scale: 1
-        fea_E0 = self.E0(fea_identity)                                                 # scale: 1/2
-        fea_E1 = self.E1(fea_E0)                                                       # scale: 1/4
-        fea_E2 = self.E2(fea_E1)                                                       # scale: 1/8
-        fea_E3 = self.E3(fea_E2)                                                       # scale: 1/16
-        fea_E4 = self.E4(fea_E3)                                                       # scale: 1/32
-
-        fea_D0 = self.D0(fea_E4)                                                       # scale: 1/32
-        fea_D1 = self.D1(torch.cat((self.upsample(fea_D0), fea_E3), 1))                # scale: 1/16
-        fea_D2 = self.D2(torch.cat((self.upsample(fea_D1), fea_E2), 1))                # scale: 1/8
-        fea_D3 = self.D3(torch.cat((self.upsample(fea_D2), fea_E1), 1))                # scale: 1/4
-
-        return (fea_D1, fea_D2, fea_D3), (fea_identity, fea_E0, fea_E1, fea_E2, fea_E3, fea_E4)
+        return features
 
 
 class PAB(nn.Module):
@@ -387,7 +356,7 @@ class ColorCorrection(pl.LightningModule):
         self.D3_upsample = Upsample(2 * channels[2], 2 * channels[1])
         self.D2 = B(4 * channels[1], 2 * channels[1])
         self.D2_upsample = Upsample(2 * channels[1], 2 * channels[0])
-        self.D1 = B(2 * channels[0] + 64, 2 * channels[0])
+        self.D1 = B(4 * channels[0], 2 * channels[0])
 
         self.output = B(2 * channels[0], 3)
 
