@@ -329,11 +329,11 @@ class Transfer(nn.Module):
         super().__init__()
 
         self.decoder = nn.Sequential(
-            BasicBlock(4 * 128, 2 * 128, bn=False),
-            BasicBlock(4 * 96, 2 * 96, bn=False),
-            BasicBlock(4 * 64, 2 * 64, bn=False),
-            BasicBlock(4 * 32, 2 * 32, bn=False),
-            BasicBlock(4 * 16, 2 * 16, bn=False)
+            BasicBlock(2 * 128, 2 * 128, bn=False),
+            BasicBlock(2 * 96, 2 * 96, bn=False),
+            BasicBlock(2 * 64, 2 * 64, bn=False),
+            BasicBlock(2 * 32, 2 * 32, bn=False),
+            BasicBlock(2 * 16, 2 * 16, bn=False)
         )
 
         self.upsample = nn.Sequential(
@@ -351,10 +351,11 @@ class Transfer(nn.Module):
             torch.cat([left, right], dim=1) for left, right in zip(fea_left, fea_right)
         ]
 
-        x = self.decoder[0](torch.cat((self.upsample[0](features[5]), features[4]), dim=1))
-        x = self.decoder[1](torch.cat((self.upsample[1](x), features[3]), dim=1))
-        x = self.decoder[2](torch.cat((self.upsample[2](x), features[2]), dim=1))
-        x = self.decoder[3](torch.cat((self.upsample[3](x), features[1]), dim=1))
-        x = self.decoder[4](torch.cat((self.upsample[4](x), features[0]), dim=1))
+        x = features[5]
+        x = self.decoder[0](self.upsample[0](x) + features[4])
+        x = self.decoder[1](self.upsample[1](x) + features[3])
+        x = self.decoder[2](self.upsample[2](x) + features[2])
+        x = self.decoder[3](self.upsample[3](x) + features[1])
+        x = self.decoder[4](self.upsample[4](x) + features[0])
 
         return self.bias(x)
