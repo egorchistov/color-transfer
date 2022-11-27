@@ -76,24 +76,24 @@ class Transfer(nn.Module):
 
         self.decoder = nn.Sequential(
             BasicBlock(2 * 160, 2 * 128, upsample=True),
-            BasicBlock(2 * 128, 2 * 96, upsample=True),
-            BasicBlock(2 * 96, 2 * 64, upsample=True),
-            BasicBlock(2 * 64, 2 * 32, upsample=True),
-            BasicBlock(2 * 32, 2 * 16, upsample=True),
+            BasicBlock(4 * 128, 2 * 96, upsample=True),
+            BasicBlock(4 * 96, 2 * 64, upsample=True),
+            BasicBlock(4 * 64, 2 * 32, upsample=True),
+            BasicBlock(4 * 32, 2 * 16, upsample=True),
         )
 
-        self.bias = nn.Conv2d(2 * 16, 3, kernel_size=1, padding=0, bias=True)
+        self.bias = nn.Conv2d(4 * 16, 3, kernel_size=1, padding=0, bias=True)
 
     def forward(self, left, right):
         features = [torch.cat([l, r], dim=1) for l, r in zip(left, right)]
 
         x = self.decoder[0](features[5])
-        x = self.decoder[1](features[4] + x)
-        x = self.decoder[2](features[3] + x)
-        x = self.decoder[3](features[2] + x)
-        x = self.decoder[4](features[1] + x)
+        x = self.decoder[1](torch.cat([features[4], x], dim=1))
+        x = self.decoder[2](torch.cat([features[3], x], dim=1))
+        x = self.decoder[3](torch.cat([features[2], x], dim=1))
+        x = self.decoder[4](torch.cat([features[1], x], dim=1))
 
-        return self.bias(features[0] + x)
+        return self.bias(torch.cat([features[0], x], dim=1))
 
 
 class PAB(nn.Module):
