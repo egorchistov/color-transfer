@@ -75,7 +75,7 @@ class SIMP(pl.LightningModule):
         fea_warped_right = [
             # Without .detach() network fails to converge at all
             warp_disp(image.detach(), -disp.detach()) for image, disp in zip(
-                fea_right[:-3],
+                fea_left[:-3],
                 [disp_s5, disp_s4, disp_s3, disp_s2, disp_s1, disp_s0]
             )
         ]
