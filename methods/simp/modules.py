@@ -5,7 +5,7 @@ from skimage import morphology
 
 
 class BasicBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, scale_factor=1):
+    def __init__(self, in_channels, out_channels, stride=1, scale_factor=1, bn=True):
         super().__init__()
         if scale_factor != 1:
             self.upsample = nn.Upsample(scale_factor=scale_factor, mode="bilinear", align_corners=False)
@@ -14,15 +14,15 @@ class BasicBlock(nn.Module):
 
         self.body = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels)
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity()
         )
 
         self.shortcut = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, bias=False),
-            nn.BatchNorm2d(out_channels)
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity()
         )
 
         self.relu = nn.ReLU(inplace=True)
@@ -317,7 +317,6 @@ class Upsample(torch.nn.Module):
 
         self.upsample = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True)
         )
 
@@ -330,11 +329,11 @@ class Transfer(nn.Module):
         super().__init__()
 
         self.decoder = nn.Sequential(
-            BasicBlock(4 * 128, 2 * 128),
-            BasicBlock(4 * 96, 2 * 96),
-            BasicBlock(4 * 64, 2 * 64),
-            BasicBlock(4 * 32, 2 * 32),
-            BasicBlock(4 * 16, 2 * 16)
+            BasicBlock(4 * 128, 2 * 128, bn=False),
+            BasicBlock(4 * 96, 2 * 96, bn=False),
+            BasicBlock(4 * 64, 2 * 64, bn=False),
+            BasicBlock(4 * 32, 2 * 32, bn=False),
+            BasicBlock(4 * 16, 2 * 16, bn=False)
         )
 
         self.upsample = nn.Sequential(
