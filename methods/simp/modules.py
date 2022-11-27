@@ -2,11 +2,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from skimage import morphology
-import pytorch_lightning as pl
 
 
 class BasicBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, scale_factor=1):
+    def __init__(self, in_channels, out_channels, stride=1, scale_factor=1, bn=True):
         super().__init__()
         if scale_factor != 1:
             self.upsample = nn.Upsample(scale_factor=scale_factor, mode="bilinear", align_corners=False)
@@ -15,15 +14,15 @@ class BasicBlock(nn.Module):
 
         self.body = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels)
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity()
         )
 
         self.shortcut = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, bias=False),
-            nn.BatchNorm2d(out_channels)
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity()
         )
 
         self.relu = nn.ReLU(inplace=True)
@@ -312,62 +311,50 @@ class Output(nn.Module):
             (valid_mask_left, valid_mask_right)
 
 
-class B(nn.Module):
-    def __init__(self, in_channels, out_channels):
-        super().__init__()
-
-        self.input = nn.Sequential(
-            nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True))
-
-        self.body = nn.Sequential(
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True))
-
-    def forward(self, x):
-        x = self.input(x)
-
-        return x + self.body(x)
-
-
 class Upsample(torch.nn.Module):
     def __init__(self, in_channels, out_channels):
         super().__init__()
+
         self.upsample = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
-            nn.LeakyReLU(negative_slope=0.1, inplace=True))
+            nn.ReLU(inplace=True)
+        )
 
     def forward(self, x):
         return self.upsample(x)
 
 
-class ColorCorrection(pl.LightningModule):
-    def __init__(self, channels):
+class Transfer(nn.Module):
+    def __init__(self):
         super().__init__()
 
-        self.E5_upsample = Upsample(2 * channels[5], 2 * channels[4])
-        self.D5 = B(4 * channels[4], 2 * channels[4])
-        self.D5_upsample = Upsample(2 * channels[4], 2 * channels[3])
-        self.D4 = B(4 * channels[3], 2 * channels[3])
-        self.D4_upsample = Upsample(2 * channels[3], 2 * channels[2])
-        self.D3 = B(4 * channels[2], 2 * channels[2])
-        self.D3_upsample = Upsample(2 * channels[2], 2 * channels[1])
-        self.D2 = B(4 * channels[1], 2 * channels[1])
-        self.D2_upsample = Upsample(2 * channels[1], 2 * channels[0])
-        self.D1 = B(4 * channels[0], 2 * channels[0])
+        self.decoder = nn.Sequential(
+            BasicBlock(4 * 128, 2 * 128, bn=False),
+            BasicBlock(4 * 96, 2 * 96, bn=False),
+            BasicBlock(4 * 64, 2 * 64, bn=False),
+            BasicBlock(4 * 32, 2 * 32, bn=False),
+            BasicBlock(4 * 16, 2 * 16, bn=False)
+        )
 
-        self.output = B(2 * channels[0], 3)
+        self.upsample = nn.Sequential(
+            Upsample(2 * 160, 2 * 128),
+            Upsample(2 * 128, 2 * 96),
+            Upsample(2 * 96, 2 * 64),
+            Upsample(2 * 64, 2 * 32),
+            Upsample(2 * 32, 2 * 16)
+        )
 
-    def forward(self, left, warped_right):
-        fea_identity, fea_E0, fea_E1, fea_E2, fea_E3, fea_E4 = [
-            torch.cat([fea_left, fea_right], dim=1) for fea_left, fea_right in zip(left, warped_right)]
+        self.bias = nn.Conv2d(2 * 16, 3, kernel_size=1, padding=0, bias=True)
 
-        fea_D5 = self.D5(torch.cat((self.E5_upsample(fea_E4), fea_E3), dim=1))
-        fea_D4 = self.D4(torch.cat((self.D5_upsample(fea_D5), fea_E2), dim=1))
-        fea_D3 = self.D3(torch.cat((self.D4_upsample(fea_D4), fea_E1), dim=1))
-        fea_D2 = self.D2(torch.cat((self.D3_upsample(fea_D3), fea_E0), dim=1))
-        fea_D1 = self.D1(torch.cat((self.D2_upsample(fea_D2), fea_identity), dim=1))
+    def forward(self, fea_left, fea_right):
+        features = [
+            torch.cat([left, right], dim=1) for left, right in zip(fea_left, fea_right)
+        ]
 
-        return self.output(fea_D1)
+        x = self.decoder[0](torch.cat((self.upsample[0](features[5]), features[4]), dim=1))
+        x = self.decoder[1](torch.cat((self.upsample[1](x), features[3]), dim=1))
+        x = self.decoder[2](torch.cat((self.upsample[2](x), features[2]), dim=1))
+        x = self.decoder[3](torch.cat((self.upsample[3](x), features[1]), dim=1))
+        x = self.decoder[4](torch.cat((self.upsample[4](x), features[0]), dim=1))
+
+        return self.bias(x)
