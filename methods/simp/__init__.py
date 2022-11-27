@@ -79,7 +79,7 @@ class SIMP(pl.LightningModule):
         ]
 
         fea_warped_right = [
-            torch.matmul(att[0].detach(), image.detach().permute(0, 2, 3, 1).contiguous()).permute(0, 3, 1, 2) for image, att in zip(
+            torch.matmul(att[0], image.permute(0, 2, 3, 1).contiguous()).permute(0, 3, 1, 2) for image, att in zip(
                 fea_right[:-3],
                 [att_s5, att_s4, att_s3, att_s2, att_s1, att_s0]
             )
@@ -87,7 +87,7 @@ class SIMP(pl.LightningModule):
 
         corrected_left = self.transfer(fea_left[:-3], fea_warped_right)
 
-        warped_right = torch.matmul(att_s5[0].detach(), right.detach().permute(0, 2, 3, 1).contiguous()).permute(0, 3, 1, 2)
+        warped_right = torch.matmul(att_s5[0], right.permute(0, 2, 3, 1).contiguous()).permute(0, 3, 1, 2)
 
         return corrected_left, (
             [att_s1, att_s2, att_s3],
