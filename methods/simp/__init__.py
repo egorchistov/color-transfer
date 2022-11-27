@@ -34,7 +34,7 @@ from pytorch_lightning.loggers import WandbLogger
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
     loss_disp_unsupervised
-from methods.simp.modules import Hourglass, CascadedPAM, Output, ColorCorrection
+from methods.simp.modules import FeatureExtration, CascadedPAM, Output, ColorCorrection
 
 
 class SIMP(pl.LightningModule):
@@ -47,7 +47,7 @@ class SIMP(pl.LightningModule):
         ## channels  #  16 #  32   #  64   #  96   #  128   #  160   ##
         ###############################################################
 
-        self.hourglass = Hourglass([32, 64, 96, 128, 160])
+        self.extraction = FeatureExtration()
         self.cas_pam = CascadedPAM([128, 96, 64])
         self.output = Output()
         self.color_correction = ColorCorrection([16, 32, 64, 96, 128, 160])
@@ -55,28 +55,30 @@ class SIMP(pl.LightningModule):
     def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
 
-        (fea_left_s1, fea_left_s2, fea_left_s3), fea_encoder_left = self.hourglass(left)
-        (fea_right_s1, fea_right_s2, fea_right_s3), fea_encoder_right = self.hourglass(right)
+        fea_left = self.extraction(left)
+        fea_right = self.extraction(right)
 
-        cost_s1, cost_s2, cost_s3 = self.cas_pam([fea_left_s1, fea_left_s2, fea_left_s3],
-                                                 [fea_right_s1, fea_right_s2, fea_right_s3])
+        costs = self.cas_pam(fea_left[-3:], fea_right[-3:])
 
-        disp_s1, att_s1, att_cycle_s1, valid_mask_s1 = self.output(cost_s1, max_disp // 16)
-        disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(cost_s2, max_disp // 8)
-        disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(cost_s3, max_disp // 4)
-        disp_s4 = 2 * F.interpolate(disp_s3, scale_factor=2, mode="nearest")
-        disp_s5 = 2 * F.interpolate(disp_s4, scale_factor=2, mode="nearest")
+        disp_s1, att_s1, att_cycle_s1, valid_mask_s1 = self.output(costs[0], max_disp // 16)
+        disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(costs[1], max_disp // 8)
+        disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(costs[2], max_disp // 4)
 
-        disp_s0 = 0.5 * F.interpolate(disp_s1, scale_factor=0.5, mode="nearest")
+        # PAM_stage at 1/2 and 1 scales consumes too much memory
+        disp_s4 = 2 * F.interpolate(disp_s3, scale_factor=2, mode="bilinear", align_corners=False)
+        disp_s5 = 2 * F.interpolate(disp_s4, scale_factor=2, mode="bilinear", align_corners=False)
 
-        fea_encoder_warped_right = [
+        # Maybe, I should add PAM_stage at 1/32 scale too
+        disp_s0 = 0.5 * F.interpolate(disp_s1, scale_factor=0.5, mode="bilinear", align_corners=False)
+
+        fea_warped_right = [
             warp_disp(image.detach(), -disp.detach()) for image, disp in zip(
-                fea_encoder_right,
+                fea_right[:-3],
                 [disp_s5, disp_s4, disp_s3, disp_s2, disp_s1, disp_s0]
             )
         ]
 
-        corrected_left = self.color_correction(fea_encoder_left, fea_encoder_warped_right)
+        corrected_left = self.color_correction(fea_left[:-3], fea_warped_right)
 
         return corrected_left, (
             disp_s5,
