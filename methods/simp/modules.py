@@ -5,7 +5,7 @@ from skimage import morphology
 
 
 class BasicBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, upsample=False, bn=True):
+    def __init__(self, in_channels, out_channels, stride=1, upsample=False):
         super().__init__()
         if upsample:
             self.upsample = nn.Sequential(
@@ -17,15 +17,15 @@ class BasicBlock(nn.Module):
 
         self.body = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
+            nn.BatchNorm2d(out_channels),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=False),
-            nn.BatchNorm2d(out_channels) if bn else nn.Identity()
+            nn.BatchNorm2d(out_channels)
         )
 
         self.shortcut = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, bias=False),
-            nn.BatchNorm2d(out_channels) if bn else nn.Identity()
+            nn.BatchNorm2d(out_channels)
         )
 
         self.relu = nn.ReLU(inplace=True)
@@ -75,11 +75,11 @@ class Transfer(nn.Module):
         super().__init__()
 
         self.decoder = nn.Sequential(
-            BasicBlock(2 * 160, 2 * 128, upsample=True, bn=False),
-            BasicBlock(4 * 128, 2 * 96, upsample=True, bn=False),
-            BasicBlock(4 * 96, 2 * 64, upsample=True, bn=False),
-            BasicBlock(4 * 64, 2 * 32, upsample=True, bn=False),
-            BasicBlock(4 * 32, 2 * 16, upsample=True, bn=False),
+            BasicBlock(2 * 160, 2 * 128, upsample=True),
+            BasicBlock(4 * 128, 2 * 96, upsample=True),
+            BasicBlock(4 * 96, 2 * 64, upsample=True),
+            BasicBlock(4 * 64, 2 * 32, upsample=True),
+            BasicBlock(4 * 32, 2 * 16, upsample=True),
         )
 
         self.bias = nn.Conv2d(4 * 16, 3, kernel_size=1, padding=0, bias=True)
