@@ -9,14 +9,14 @@ python -m methods.simp.train \
     --accelerator="gpu" \
     --img_height=256 \
     --img_width=512  \
-    --batch_size=8  \
+    --batch_size=16  \
     --max_epochs=100  \
     --num_workers=2  \
     --check_val_every_n_epoch=5
 ```
 
 In our expriments we use Kaggle GPU environment:
-Intel Xeon CPU (2 cores), 13 GB RAM and Tesla P100-16GB.
+Intel Xeon CPU (2 cores), 13 Gb RAM and Tesla P100-16GB.
 
 See https://wandb.ai/egorchistov/simp for training logs and artifacts.
 
@@ -34,53 +34,49 @@ from pytorch_lightning.loggers import WandbLogger
 from methods.simp.losses import warp_disp
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle, loss_disp_smoothness, \
     loss_disp_unsupervised
-from methods.simp.modules import FeatureExtration, CascadedPAM, Output, Transfer
+from methods.simp.modules import Hourglass, CascadedPAM, Output, ColorCorrection
 
 
 class SIMP(pl.LightningModule):
-    ###############################################################
-    ## scale     #  1  #  1/2  #  1/4  #  1/8  #  1/16  #  1/32  ##
-    ## channels  #  16 #  32   #  64   #  96   #  128   #  160   ##
-    ###############################################################
-
     def __init__(self, learning_rate=1e-4):
         super().__init__()
-
         self.learning_rate = learning_rate
 
-        self.extraction = FeatureExtration()
-        self.cas_pam = CascadedPAM()
-        self.output = Output()
-        self.transfer = Transfer()
+        ###############################################################
+        ## scale     #  1  #  1/2  #  1/4  #  1/8  #  1/16  #  1/32  ##
+        ## channels  #  16 #  32   #  64   #  96   #  128   #  160   ##
+        ###############################################################
 
-    def forward(self, left, right):
+        self.hourglass = Hourglass([32, 64, 96, 128, 160])
+        self.cas_pam = CascadedPAM([128, 96, 64])
+        self.output = Output()
+        self.color_correction = ColorCorrection([16, 32, 64, 96, 128, 160])
+
+    def forward(self, left, right, max_disp=0):
         b, _, h, w = left.shape
 
-        fea_left = self.extraction(left)
-        fea_right = self.extraction(right)
+        (fea_left_s1, fea_left_s2, fea_left_s3), fea_encoder_left = self.hourglass(left)
+        (fea_right_s1, fea_right_s2, fea_right_s3), fea_encoder_right = self.hourglass(right)
 
-        costs = self.cas_pam(fea_left[-3:], fea_right[-3:])
+        cost_s1, cost_s2, cost_s3 = self.cas_pam([fea_left_s1, fea_left_s2, fea_left_s3],
+                                                 [fea_right_s1, fea_right_s2, fea_right_s3])
 
-        disp_s1, att_s1, att_cycle_s1, valid_mask_s1 = self.output(costs[0])
-        disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(costs[1])
-        disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(costs[2])
+        disp_s1, att_s1, att_cycle_s1, valid_mask_s1 = self.output(cost_s1, max_disp // 16)
+        disp_s2, att_s2, att_cycle_s2, valid_mask_s2 = self.output(cost_s2, max_disp // 8)
+        disp_s3, att_s3, att_cycle_s3, valid_mask_s3 = self.output(cost_s3, max_disp // 4)
+        disp_s4 = 2 * F.interpolate(disp_s3, scale_factor=2, mode="nearest")
+        disp_s5 = 2 * F.interpolate(disp_s4, scale_factor=2, mode="nearest")
 
-        # PAM_stage at 1/2 and 1 scales consumes too much memory
-        disp_s4 = 2 * F.interpolate(disp_s3, scale_factor=2)
-        disp_s5 = 2 * F.interpolate(disp_s4, scale_factor=2)
+        disp_s0 = 0.5 * F.interpolate(disp_s1, scale_factor=0.5, mode="nearest")
 
-        # Maybe, I should add PAM_stage at 1/32 scale too
-        disp_s0 = 0.5 * F.interpolate(disp_s1, scale_factor=0.5)
-
-        fea_warped_right = [
-            # Without .detach() network fails to converge at all
+        fea_encoder_warped_right = [
             warp_disp(image.detach(), -disp.detach()) for image, disp in zip(
-                fea_left[:-3],
+                fea_encoder_right,
                 [disp_s5, disp_s4, disp_s3, disp_s2, disp_s1, disp_s0]
             )
         ]
 
-        corrected_left = self.transfer(fea_left[:-3], fea_warped_right)
+        corrected_left = self.color_correction(fea_encoder_left, fea_encoder_warped_right)
 
         return corrected_left, (
             disp_s5,
