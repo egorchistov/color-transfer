@@ -74,23 +74,14 @@ class PAB(nn.Module):
         super().__init__()
 
         self.head = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
             nn.ReLU(inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=False),
-            nn.BatchNorm2d(channels),
+            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
             nn.ReLU(inplace=True),
         )
 
-        self.query = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=False),
-            nn.BatchNorm2d(channels),
-        )
-
-        self.key = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=False),
-            nn.BatchNorm2d(channels),
-        )
+        self.query = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
+        self.key = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
 
     def forward(self, x_left, x_right, cost):
         """
@@ -150,15 +141,13 @@ class CascadedPAM(nn.Module):
 
         # bottleneck in stage 2
         self.b2 = nn.Sequential(
-            nn.Conv2d(128 + 96, 96, kernel_size=1, padding=0, bias=False),
-            nn.BatchNorm2d(96),
+            nn.Conv2d(128 + 96, 96, kernel_size=1, padding=0, bias=True),
             nn.ReLU(inplace=True)
         )
 
         # bottleneck in stage 3
         self.b3 = nn.Sequential(
-            nn.Conv2d(96 + 64, 64, kernel_size=1, padding=0, bias=False),
-            nn.BatchNorm2d(64),
+            nn.Conv2d(96 + 64, 64, kernel_size=1, padding=0, bias=True),
             nn.ReLU(inplace=True)
         )
 
