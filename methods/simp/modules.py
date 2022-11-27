@@ -5,12 +5,8 @@ from skimage import morphology
 
 
 class BasicBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, scale_factor=1, bn=True):
+    def __init__(self, in_channels, out_channels, stride=1, bn=True):
         super().__init__()
-        if scale_factor != 1:
-            self.upsample = nn.Upsample(scale_factor=scale_factor, mode="bilinear", align_corners=False)
-        else:
-            self.upsample = None
 
         self.body = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=not bn),
@@ -28,9 +24,6 @@ class BasicBlock(nn.Module):
         self.relu = nn.ReLU(inplace=True)
 
     def forward(self, x):
-        if self.upsample is not None:
-            x = self.upsample(x)
-
         return self.relu(self.shortcut(x) + self.body(x))
 
 
@@ -48,9 +41,18 @@ class FeatureExtration(nn.Module):
         )
 
         self.decoder = nn.Sequential(
-            BasicBlock(160, 128, scale_factor=2),
-            BasicBlock(128, 96, scale_factor=2),
-            BasicBlock(96, 64, scale_factor=2)
+            nn.Sequential(
+                Upsample(160, 128),
+                BasicBlock(128, 128),
+            ),
+            nn.Sequential(
+                Upsample(128, 96),
+                BasicBlock(96, 96),
+            ),
+            nn.Sequential(
+                Upsample(96, 64),
+                BasicBlock(64, 64),
+            )
         )
 
     def forward(self, x):
@@ -312,11 +314,12 @@ class Output(nn.Module):
 
 
 class Upsample(torch.nn.Module):
-    def __init__(self, in_channels, out_channels):
+    def __init__(self, in_channels, out_channels, bn=True):
         super().__init__()
 
         self.upsample = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1),
+            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1, bias=not bn),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
             nn.ReLU(inplace=True)
         )
 
@@ -337,11 +340,11 @@ class Transfer(nn.Module):
         )
 
         self.upsample = nn.Sequential(
-            Upsample(2 * 160, 2 * 128),
-            Upsample(2 * 128, 2 * 96),
-            Upsample(2 * 96, 2 * 64),
-            Upsample(2 * 64, 2 * 32),
-            Upsample(2 * 32, 2 * 16)
+            Upsample(2 * 160, 2 * 128, bn=False),
+            Upsample(2 * 128, 2 * 96, bn=False),
+            Upsample(2 * 96, 2 * 64, bn=False),
+            Upsample(2 * 64, 2 * 32, bn=False),
+            Upsample(2 * 32, 2 * 16, bn=False)
         )
 
         self.bias = nn.Conv2d(2 * 16, 3, kernel_size=1, padding=0, bias=True)
