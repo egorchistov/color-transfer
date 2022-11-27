@@ -352,10 +352,10 @@ class Transfer(nn.Module):
         ]
 
         x = features[5]
-        x = self.decoder[0](torch.cat((self.upsample[0](x) + features[4]), dim=1))
-        x = self.decoder[1](torch.cat((self.upsample[1](x) + features[3]), dim=1))
-        x = self.decoder[2](torch.cat((self.upsample[2](x) + features[2]), dim=1))
-        x = self.decoder[3](torch.cat((self.upsample[3](x) + features[1]), dim=1))
-        x = self.decoder[4](torch.cat((self.upsample[4](x) + features[0]), dim=1))
+        x = self.decoder[0](self.upsample[0](x) + features[4])
+        x = self.decoder[1](self.upsample[1](x) + features[3])
+        x = self.decoder[2](self.upsample[2](x) + features[2])
+        x = self.decoder[3](self.upsample[3](x) + features[1])
+        x = self.decoder[4](self.upsample[4](x) + features[0])
 
         return self.bias(x)
