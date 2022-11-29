@@ -32,7 +32,7 @@ import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle
-from methods.simp.modules import FeatureExtration, CascadedPAM, Output, Transfer
+from methods.simp.modules import FeatureExtration, CascadedPAM, output, Transfer
 
 
 class SIMP(pl.LightningModule):
@@ -47,10 +47,9 @@ class SIMP(pl.LightningModule):
 
         self.extraction = FeatureExtration()
         self.cas_pam = CascadedPAM()
-        self.output = Output()
         self.transfer = Transfer()
 
-    def forward(self, left, right, max_disp=0):
+    def forward(self, left, right):
         b, _, h, w = left.shape
 
         fea_left = self.extraction(left)
@@ -58,9 +57,9 @@ class SIMP(pl.LightningModule):
 
         costs = self.cas_pam(fea_left[-3:], fea_right[-3:])
 
-        att_s1, att_cycle_s1, valid_mask_s1 = self.output(costs[0])
-        att_s2, att_cycle_s2, valid_mask_s2 = self.output(costs[1])
-        att_s3, att_cycle_s3, valid_mask_s3 = self.output(costs[2])
+        att_s1, att_cycle_s1, valid_mask_s1 = output(costs[0])
+        att_s2, att_cycle_s2, valid_mask_s2 = output(costs[1])
+        att_s3, att_cycle_s3, valid_mask_s3 = output(costs[2])
 
         # PAM_stage at 1/2 and 1 scales consumes too much memory
         att_s4 = [
@@ -79,7 +78,7 @@ class SIMP(pl.LightningModule):
         ]
 
         fea_warped_right = [
-            torch.matmul(att[0], image.permute(0, 2, 3, 1).contiguous()).permute(0, 3, 1, 2) for image, att in zip(
+            torch.matmul(att[0], image.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for image, att in zip(
                 fea_right[:-3],
                 [att_s5, att_s4, att_s3, att_s2, att_s1, att_s0]
             )
@@ -87,7 +86,7 @@ class SIMP(pl.LightningModule):
 
         corrected_left = self.transfer(fea_left[:-3], fea_warped_right)
 
-        warped_right = torch.matmul(att_s5[0], right.permute(0, 2, 3, 1).contiguous()).permute(0, 3, 1, 2)
+        warped_right = torch.matmul(att_s5[0], right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
         return corrected_left, (
             [att_s1, att_s2, att_s3],
@@ -106,11 +105,11 @@ class SIMP(pl.LightningModule):
         loss_PAM_S = loss_pam_smoothness(att)
 
         loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
-        loss = loss_color_correction + 0.001 * (loss_PAM_P + loss_PAM_S + loss_PAM_C)
+        loss = loss_color_correction + 0.005 * (loss_PAM_P + loss_PAM_S + loss_PAM_C)
 
-        self.log("Photometric Loss", 0.001 * loss_PAM_P)
-        self.log("Smoothness Loss", 0.001 * loss_PAM_S)
-        self.log("Cycle Loss", 0.001 * loss_PAM_C)
+        self.log("Photometric Loss", 0.005 * loss_PAM_P)
+        self.log("Smoothness Loss", 0.005 * loss_PAM_S)
+        self.log("Cycle Loss", 0.005 * loss_PAM_C)
         self.log("Color Correction Loss", loss_color_correction)
 
         self.log("Loss", loss)
