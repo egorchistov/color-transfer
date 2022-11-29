@@ -105,11 +105,11 @@ class SIMP(pl.LightningModule):
         loss_PAM_S = loss_pam_smoothness(att)
 
         loss_color_correction = F.smooth_l1_loss(corrected_left, left_gt)
-        loss = loss_color_correction + 0.005 * (loss_PAM_P + loss_PAM_S + loss_PAM_C)
+        loss = loss_color_correction + 0.001 * (loss_PAM_P + loss_PAM_S + loss_PAM_C)
 
-        self.log("Photometric Loss", 0.005 * loss_PAM_P)
-        self.log("Smoothness Loss", 0.005 * loss_PAM_S)
-        self.log("Cycle Loss", 0.005 * loss_PAM_C)
+        self.log("Photometric Loss", 0.001 * loss_PAM_P)
+        self.log("Smoothness Loss", 0.001 * loss_PAM_S)
+        self.log("Cycle Loss", 0.001 * loss_PAM_C)
         self.log("Color Correction Loss", loss_color_correction)
 
         self.log("Loss", loss)
