@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from skimage import morphology
 
 
 class BasicBlock(nn.Module):
@@ -84,26 +83,41 @@ class PAB(nn.Module):
         self.key = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
 
     def forward(self, x_left, x_right, cost):
-        """
-        :param x_left:      features from the left image  (B * C * H * W)
-        :param x_right:     features from the right image (B * C * H * W)
-        :param cost:        input matching cost           (B * H * W * W)
+        """Apply parallax attention to input features and update cost volume
+
+        Parameters
+        ----------
+        x_left : tensor of shape (B, C, H, W)
+            Features from the left image
+        x_right : tensor of shape (B, C, H, W)
+            Features from the right image
+        cost : a pair of two (B, H, W, W) tensors
+            Matching costs: cost_right2left, cost_left2righ
+
+        Returns
+        -------
+        x_left : tensor of shape (B, C, H, W)
+            Updated features from the left image
+        x_left : tensor of shape (B, C, H, W)
+            Updated features from the left image
+        cost : a pair of two (B, H, W, W) tensors
+            Updated matching costs: cost_right2left, cost_left2righ
         """
 
         b, c, h, w = x_left.shape
         fea_left = self.head(x_left)
         fea_right = self.head(x_right)
 
-        # C_right2left
-        Q = self.query(fea_left).permute(0, 2, 3, 1).contiguous()                     # B * H * W * C
-        K = self.key(fea_right).permute(0, 2, 1, 3) .contiguous()                     # B * H * C * W
-        cost_right2left = torch.matmul(Q, K) / c                                      # scale the matching cost
+        # cost_right2left
+        Q = self.query(fea_left).permute(0, 2, 3, 1)   # B * H * W * C
+        K = self.key(fea_right).permute(0, 2, 1, 3)    # B * H * C * W
+        cost_right2left = torch.matmul(Q, K) / c       # scale the matching cost
         cost_right2left = cost_right2left + cost[0]
 
-        # C_left2right
-        Q = self.query(fea_right).permute(0, 2, 3, 1).contiguous()                    # B * H * W * C
-        K = self.key(fea_left).permute(0, 2, 1, 3).contiguous()                       # B * H * C * W
-        cost_left2right = torch.matmul(Q, K) / c                                      # scale the matching cost
+        # cost_left2right
+        Q = self.query(fea_right).permute(0, 2, 3, 1)  # B * H * W * C
+        K = self.key(fea_left).permute(0, 2, 1, 3)     # B * H * C * W
+        cost_left2right = torch.matmul(Q, K) / c       # scale the matching cost
         cost_left2right = cost_left2right + cost[1]
 
         return x_left + fea_left, \
@@ -152,10 +166,21 @@ class CascadedPAM(nn.Module):
         )
 
     def forward(self, fea_left, fea_right):
+        """Apply three parallax attention stages at 1/16, 1/8, 1/4 scales
+
+        Parameters
+        ----------
+        fea_left : feature list of scales 1/16, 1/8, 1/4
+            fea_left_s1, fea_left_s2, fea_left_s3
+        fea_right : feature list of scales 1/16, 1/8, 1/4
+            fea_right_s1, fea_right_s2, fea_right_s3
+
+        Returns
+        -------
+        costs : cost list of scales 1/16, 1/8, 1/4
+            cost_s1, cost_s2, cost_s3
         """
-        :param fea_left:    feature list [fea_left_s1, fea_left_s2, fea_left_s3]
-        :param fea_right:   feature list [fea_right_s1, fea_right_s2, fea_right_s3]
-        """
+
         fea_left_s1, fea_left_s2, fea_left_s3 = fea_left
         fea_right_s1, fea_right_s2, fea_right_s3 = fea_right
 
@@ -199,45 +224,54 @@ class CascadedPAM(nn.Module):
         return [cost_s1, cost_s2, cost_s3]
 
 
-class Output(nn.Module):
-    def __init__(self):
-        super().__init__()
+def output(costs):
+    """Apply masked softmax to cost volumes and return matching attention
+    maps and valid masks
 
-    def forward(self, cost):
-        cost_right2left, cost_left2right = cost
-        b, h, w, _ = cost_right2left.shape
+    Parameters
+    ----------
+    costs : pair of two (B, H, W, W) tensors
+        Matching costs: cost_right2left, cost_left2righ
 
-        # M_right2left
-        # exclude negative disparities
-        cost_right2left = torch.tril(cost_right2left)
-        cost_right2left = torch.exp(cost_right2left - cost_right2left.max(dim=-1, keepdim=True)[0])
-        cost_right2left = torch.tril(cost_right2left)
+    Returns
+    -------
+    atts : pair of two (B, H, W, W) tensors
+        Matching attention maps: att_right2left, att_left2right
+    atts_cycle : pair of two (B, H, W, W) tensors
+        Matching attention cycle maps: att_left2right2left, att_right2left2right
+    valid_masks : pair of two (B, 1, H, W) tensors
+        Matching valid masks: valid_mask_left, valid_mask_right
+    """
 
-        att_right2left = cost_right2left / (cost_right2left.sum(dim=-1, keepdim=True) + 1e-8)
+    cost_right2left, cost_left2right = costs
 
-        # M_left2right
-        # exclude negative disparities
-        cost_left2right = torch.triu(cost_left2right)
-        cost_left2right = torch.exp(cost_left2right - cost_left2right.max(dim=-1, keepdim=True)[0])
-        cost_left2right = torch.triu(cost_left2right)
+    # masked (lower triangular) softmax(dim=-1)
+    cost_right2left = torch.tril(cost_right2left)
+    cost_right2left = torch.exp(cost_right2left - cost_right2left.max(dim=-1, keepdim=True)[0])
+    cost_right2left = torch.tril(cost_right2left)
+    att_right2left = cost_right2left / (cost_right2left.sum(dim=-1, keepdim=True) + 1e-8)
 
-        att_left2right = cost_left2right / (cost_left2right.sum(dim=-1, keepdim=True) + 1e-8)
+    # masked (upper triangular) softmax(dim=-1)
+    cost_left2right = torch.triu(cost_left2right)
+    cost_left2right = torch.exp(cost_left2right - cost_left2right.max(dim=-1, keepdim=True)[0])
+    cost_left2right = torch.triu(cost_left2right)
+    att_left2right = cost_left2right / (cost_left2right.sum(dim=-1, keepdim=True) + 1e-8)
 
-        # valid mask (left image)
-        valid_mask_left = torch.sum(att_left2right.detach(), dim=-2) > 0.1
-        valid_mask_left = valid_mask_left.view(b, 1, h, w)
+    # valid mask (left image)
+    valid_mask_left = torch.sum(att_left2right.detach(), dim=-2) > 0.1
+    valid_mask_left = valid_mask_left.unsqueeze(dim=1)
 
-        # valid mask (right image)
-        valid_mask_right = torch.sum(att_right2left.detach(), dim=-2) > 0.1
-        valid_mask_right = valid_mask_right.view(b, 1, h, w)
+    # valid mask (right image)
+    valid_mask_right = torch.sum(att_right2left.detach(), dim=-2) > 0.1
+    valid_mask_right = valid_mask_right.unsqueeze(dim=1)
 
-        # cycle-attention maps
-        att_left2right2left = torch.matmul(att_right2left, att_left2right).view(b, h, w, w)
-        att_right2left2right = torch.matmul(att_left2right, att_right2left).view(b, h, w, w)
+    # cycle-attention maps
+    att_left2right2left = torch.matmul(att_right2left, att_left2right)
+    att_right2left2right = torch.matmul(att_left2right, att_right2left)
 
-        return (att_right2left.view(b, h, w, w), att_left2right.view(b, h, w, w)), \
-            (att_left2right2left, att_right2left2right), \
-            (valid_mask_left, valid_mask_right)
+    return (att_right2left, att_left2right), \
+        (att_left2right2left, att_right2left2right), \
+        (valid_mask_left, valid_mask_right)
 
 
 class Upsample(torch.nn.Module):
