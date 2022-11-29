@@ -32,7 +32,7 @@ import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 
 from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle
-from methods.simp.modules import FeatureExtration, CascadedPAM, output, Transfer
+from methods.simp.modules import FeatureExtration, CasPAM, output, Transfer
 
 
 class SIMP(pl.LightningModule):
@@ -46,7 +46,7 @@ class SIMP(pl.LightningModule):
         ###############################################################
 
         self.extraction = FeatureExtration()
-        self.cas_pam = CascadedPAM()
+        self.cas_pam = CasPAM()
         self.transfer = Transfer()
 
     def forward(self, left, right):

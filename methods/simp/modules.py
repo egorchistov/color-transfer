@@ -125,7 +125,7 @@ class PAB(nn.Module):
             (cost_right2left, cost_left2right)
 
 
-class StagePAM(nn.Module):
+class PAM(nn.Module):
     def __init__(self, channels):
         super().__init__()
 
@@ -143,14 +143,14 @@ class StagePAM(nn.Module):
         return fea_left, fea_right, cost
 
 
-class CascadedPAM(nn.Module):
+class CasPAM(nn.Module):
     def __init__(self):
         super().__init__()
 
         self.stages = nn.Sequential(
-            StagePAM(128),
-            StagePAM(96),
-            StagePAM(64)
+            PAM(128),
+            PAM(96),
+            PAM(64)
         )
 
         # bottleneck in stage 2
