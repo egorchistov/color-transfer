@@ -30,6 +30,21 @@ class FeatureExtration(nn.Module):
     def __init__(self):
         super().__init__()
 
+        body = [BasicBlock(3, 64, bn=False)]
+        for i in range(16):
+            body.append(
+                BasicBlock(64, 64, bn=False)
+            )
+        self.body = nn.Sequential(*body)
+
+    def forward(self, x):
+        return self.body(x)
+
+
+class MultiScaleFeatureExtration(nn.Module):
+    def __init__(self):
+        super().__init__()
+
         self.encoder = nn.Sequential(
             BasicBlock(3, 16),
             BasicBlock(16, 32, stride=2),
@@ -289,6 +304,27 @@ class Upsample(torch.nn.Module):
 
 
 class Transfer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.body = nn.Sequential(
+            BasicBlock(64 + 64 + 1, 64, bn=False),
+            BasicBlock(64, 64, bn=False),
+            BasicBlock(64, 64, bn=False),
+            BasicBlock(64, 64, bn=False),
+            BasicBlock(64, 64, bn=False),
+            BasicBlock(64, 64, bn=False),
+            nn.Conv2d(64, 32, kernel_size=3, padding=1),
+            nn.Conv2d(32, 3, kernel_size=3, padding=1)
+        )
+
+    def forward(self, fea_left, fea_right, valid_mask):
+        features = torch.cat([fea_left, fea_right, valid_mask[0]], dim=1)
+
+        return self.body(features)
+
+
+class MultiScaleTransfer(nn.Module):
     def __init__(self):
         super().__init__()
 

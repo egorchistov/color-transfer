@@ -11,8 +11,7 @@ from kornia.metrics import psnr, ssim
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 
-from methods.simp.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle
-from methods.simp.modules import FeatureExtration, CasPAM, output, Transfer
+from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiScaleTransfer
 
 
 class SIMP(pl.LightningModule):
@@ -25,9 +24,9 @@ class SIMP(pl.LightningModule):
         ## channels  #  16 #  32   #  64   #  96   #  128   #  160   ##
         ###############################################################
 
-        self.extraction = FeatureExtration()
+        self.extraction = MultiScaleFeatureExtration()
         self.cas_pam = CasPAM()
-        self.transfer = Transfer()
+        self.transfer = MultiScaleTransfer()
 
     def forward(self, left, right):
         b, _, h, w = left.shape
