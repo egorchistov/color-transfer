@@ -1,3 +1,5 @@
+import subprocess
+from pathlib import Path
 from functools import partial
 
 import pytest
@@ -10,7 +12,6 @@ from methods.linear import color_transfer_in_correlated_color_space
 from methods.linear import monge_kantorovitch_color_transfer
 from methods.iterative import iterative_distribution_transfer
 from methods.iterative import automated_color_grading
-from methods.dcmc import deep_color_mismatch_correction
 
 
 @pytest.mark.parametrize("method", [
@@ -21,7 +22,6 @@ from methods.dcmc import deep_color_mismatch_correction
     partial(monge_kantorovitch_color_transfer, decomposition="MK"),
     iterative_distribution_transfer,
     automated_color_grading,
-    deep_color_mismatch_correction
 ])
 def test_method(method):
     """Test Color Transfer Methods
@@ -42,3 +42,25 @@ def test_method(method):
     print(f"PSNR gain: {psnr_gain:.3f}, PSNR after: {psnr_after:.3f}")
 
     assert psnr_gain > 10
+
+
+@pytest.mark.parametrize("model", ["DCMC", "SIMP"])
+def test_train_model(model):
+    p = subprocess.run(
+        [
+            "python",
+            "train.py",
+            f"--model={model}",
+            "--dataset_path=datasets/dataset",
+            "--batch_size=1",
+            "--img_height=64",
+            "--img_width=64",
+            "--limit_train_batches=1",
+            "--limit_val_batches=1",
+            "--max_epochs=1",
+            "--num_workers=1"
+        ],
+        cwd=Path("..")
+    )
+
+    assert p.returncode == 0
