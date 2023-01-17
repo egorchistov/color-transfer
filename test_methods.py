@@ -1,5 +1,4 @@
 import subprocess
-from pathlib import Path
 from functools import partial
 
 import pytest
@@ -59,8 +58,7 @@ def test_train_model(model):
             "--limit_val_batches=1",
             "--max_epochs=1",
             "--num_workers=1"
-        ],
-        cwd=Path("..")
+        ]
     )
 
     assert p.returncode == 0
