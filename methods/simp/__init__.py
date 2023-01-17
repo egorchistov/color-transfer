@@ -1,25 +1,5 @@
 """Stereo Investigation Model Precise
 
-Follow dataset preparation instructions in datasets package.
-Then use this command to start training
-
-```shell
-python -m methods.simp.train \
-    --dataset_path=datasets/dataset \
-    --accelerator="gpu" \
-    --img_height=256 \
-    --img_width=512  \
-    --batch_size=16  \
-    --max_epochs=100  \
-    --num_workers=2  \
-    --check_val_every_n_epoch=5
-```
-
-In our expriments we use Kaggle GPU environment:
-Intel Xeon CPU (2 cores), 13 Gb RAM and Tesla P100-16GB.
-
-See https://wandb.ai/egorchistov/simp for training logs and artifacts.
-
 Links
 -----
 https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM

@@ -11,7 +11,7 @@ from albumentations.pytorch import ToTensorV2
 from torch.utils.data import Dataset
 
 
-class SIMPDataset(Dataset):
+class CTDataset(Dataset):
     def __init__(self, image_dir: Path, transforms, distortions):
         """First distortions are applied to the left image, then transforms are applied to both"""
 
@@ -38,7 +38,7 @@ class SIMPDataset(Dataset):
         return left, left_gt, right
 
 
-class SIMPDataModule(pl.LightningDataModule):
+class CTDataModule(pl.LightningDataModule):
     def __init__(self, image_dir, batch_size, patch_size, num_workers):
         super().__init__()
 
@@ -75,7 +75,7 @@ class SIMPDataModule(pl.LightningDataModule):
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
 
-            self.train = SIMPDataset(self.image_dir / "Train", train_transforms, distortions)
+            self.train = CTDataset(self.image_dir / "Train", train_transforms, distortions)
 
             val_transforms = A.Compose([
                 A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
@@ -84,7 +84,7 @@ class SIMPDataModule(pl.LightningDataModule):
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
 
-            self.val = SIMPDataset(self.image_dir / "Validation", val_transforms, distortions)
+            self.val = CTDataset(self.image_dir / "Validation", val_transforms, distortions)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
@@ -107,6 +107,6 @@ class SIMPDataModule(pl.LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = SIMPDataModule(Path("../../datasets/dataset"), batch_size=1, patch_size=(256, 512), num_workers=1)
+    datamodule = CTDataModule(Path("datasets/dataset"), batch_size=1, patch_size=(256, 512), num_workers=1)
     datamodule.setup()
     datamodule.plot_example()

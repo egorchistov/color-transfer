@@ -1,23 +1,5 @@
 """Deep Color Mismatch Correction in Stereoscopic 3D Images
 
-Follow dataset preparation instructions in datasets package.
-Then use this command to start training
-
-```shell
-python -m methods.dcmc.train \
-    --dataset_path=datasets/dataset \
-    --accelerator="gpu" \
-    --img_height=96 \
-    --img_width=192 \
-    --batch_size=16 \
-    --max_epochs=100
-```
-
-We use Tesla P100-16GB in our expreriments.
-In this implementation we do not use horizontal and vertical flips as augmentation.
-
-See https://wandb.ai/egorchistov/dcmc for training logs and artifacts.
-
 Links
 -----
 https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
