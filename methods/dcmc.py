@@ -1,16 +1,23 @@
 """Deep Color Mismatch Correction in Stereoscopic 3D Images
 
+Citation
+--------
+@inproceedings{croci2021deep,
+  title={Deep Color Mismatch Correction In Stereoscopic 3d Images},
+  author={Croci, Simone and Ozcinar, Cagri and Zerman, Emin and Dudek, Roman and Knorr, Sebastian and Smolic, Aljosa},
+  booktitle={2021 IEEE International Conference on Image Processing (ICIP)},
+  pages={1749--1753},
+  year={2021},
+  organization={IEEE}
+}
+
 Links
 -----
 https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 """
 
-from pathlib import Path
-
-import wandb
 import torch
 import pytorch_lightning as pl
-from kornia import image_to_tensor, tensor_to_image
 from kornia.metrics import psnr, ssim
 from kornia.losses import ssim_loss
 import torch.nn.functional as F
@@ -18,36 +25,6 @@ from pytorch_lightning.loggers import WandbLogger
 
 from methods.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle
 from methods.modules import FeatureExtration, PAM, output, Transfer
-
-
-def deep_color_mismatch_correction(target, reference):
-    """Deep Color Mismatch Correction in Stereoscopic 3D Images
-
-    Citation
-    --------
-    @inproceedings{croci2021deep,
-      title={Deep Color Mismatch Correction In Stereoscopic 3d Images},
-      author={Croci, Simone and Ozcinar, Cagri and Zerman, Emin and Dudek, Roman and Knorr, Sebastian and Smolic, Aljosa},
-      booktitle={2021 IEEE International Conference on Image Processing (ICIP)},
-      pages={1749--1753},
-      year={2021},
-      organization={IEEE}
-    }
-    """
-
-    run = wandb.init()
-    artifact = run.use_artifact("egorchistov/dcmc/model-30bwc35r:v19", type="model")
-    artifact_dir = artifact.download()
-    model = DCMC.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
-
-    target = image_to_tensor(target, keepdim=False).float()
-    reference = image_to_tensor(reference, keepdim=False).float()
-
-    model.eval()
-    with torch.no_grad():
-        corrected_left, _ = model(target, reference)
-
-    return tensor_to_image(corrected_left)
 
 
 class DCMC(pl.LightningModule):

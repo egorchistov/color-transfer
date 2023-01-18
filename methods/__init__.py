@@ -31,14 +31,14 @@ def runner(target_mask, reference_mask, corrected_mask, method):
     """
     Path(corrected_mask).parent.mkdir(parents=True, exist_ok=True)
 
-    cap_target = cv2.VideoCapture(target_mask)
-    cap_reference = cv2.VideoCapture(reference_mask)
+    cap_target = cv2.VideoCapture(str(target_mask))
+    cap_reference = cv2.VideoCapture(str(reference_mask))
 
     width = int(cap_target.get(cv2.CAP_PROP_FRAME_WIDTH))
     height = int(cap_target.get(cv2.CAP_PROP_FRAME_HEIGHT))
     fourcc = int(cap_target.get(cv2.CAP_PROP_FOURCC))
     fps = int(cap_target.get(cv2.CAP_PROP_FPS)) if fourcc else 0
-    cap_corrected = cv2.VideoWriter(corrected_mask, fourcc, fps, (width, height))
+    cap_corrected = cv2.VideoWriter(str(corrected_mask), fourcc, fps, (width, height))
 
     frame_count = int(cap_target.get(cv2.CAP_PROP_FRAME_COUNT))
 
