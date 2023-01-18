@@ -11,6 +11,22 @@ from albumentations.pytorch import ToTensorV2
 from torch.utils.data import Dataset
 
 
+distortions = A.OneOf([
+    A.RandomBrightnessContrast(contrast_limit=0, brightness_limit=(-0.3, -0.1)),
+    A.RandomBrightnessContrast(contrast_limit=0, brightness_limit=(0.1, 0.3)),
+    A.RandomBrightnessContrast(contrast_limit=(-0.3, -0.1), brightness_limit=0),
+    A.RandomBrightnessContrast(contrast_limit=(0.1, 0.3), brightness_limit=0),
+    A.RandomGamma(gamma_limit=(70, 90)),
+    A.RandomGamma(gamma_limit=(110, 130)),
+    A.HueSaturationValue(hue_shift_limit=(-30, -10), sat_shift_limit=0, val_shift_limit=0),
+    A.HueSaturationValue(hue_shift_limit=(10, 30), sat_shift_limit=0, val_shift_limit=0),
+    A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=(-30, -10), val_shift_limit=0),
+    A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=(10, 30), val_shift_limit=0),
+    A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=0, val_shift_limit=(-30, -10)),
+    A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=0, val_shift_limit=(10, 30)),
+], p=36 / 37)
+
+
 class CTDataset(Dataset):
     def __init__(self, image_dir: Path, transforms, distortions):
         """First distortions are applied to the left image, then transforms are applied to both"""
@@ -53,21 +69,6 @@ class CTDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         if stage == "fit" or stage is None:
-            distortions = A.OneOf([
-                A.RandomBrightnessContrast(contrast_limit=0, brightness_limit=(-0.3, -0.1)),
-                A.RandomBrightnessContrast(contrast_limit=0, brightness_limit=(0.1, 0.3)),
-                A.RandomBrightnessContrast(contrast_limit=(-0.3, -0.1), brightness_limit=0),
-                A.RandomBrightnessContrast(contrast_limit=(0.1, 0.3), brightness_limit=0),
-                A.RandomGamma(gamma_limit=(70, 90)),
-                A.RandomGamma(gamma_limit=(110, 130)),
-                A.HueSaturationValue(hue_shift_limit=(-30, -10), sat_shift_limit=0, val_shift_limit=0),
-                A.HueSaturationValue(hue_shift_limit=(10, 30), sat_shift_limit=0, val_shift_limit=0),
-                A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=(-30, -10), val_shift_limit=0),
-                A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=(10, 30), val_shift_limit=0),
-                A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=0, val_shift_limit=(-30, -10)),
-                A.HueSaturationValue(hue_shift_limit=0, sat_shift_limit=0, val_shift_limit=(10, 30)),
-            ], p=36 / 37)
-
             train_transforms = A.Compose([
                 A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
                 A.RandomCrop(self.patch_size[0], self.patch_size[1]),
