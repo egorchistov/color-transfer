@@ -11,3 +11,4 @@ pytorch_lightning
 torchvision
 pillow
 wandb
+pytest
