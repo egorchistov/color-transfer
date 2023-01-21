@@ -10,7 +10,7 @@ class BasicBlock(nn.Module):
         self.body = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
             nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity()
         )
@@ -20,7 +20,7 @@ class BasicBlock(nn.Module):
             nn.BatchNorm2d(out_channels) if bn else nn.Identity()
         )
 
-        self.relu = nn.ReLU(inplace=True)
+        self.relu = nn.LeakyReLU(inplace=True)
 
     def forward(self, x):
         return self.relu(self.shortcut(x) + self.body(x))
@@ -30,8 +30,8 @@ class FeatureExtration(nn.Module):
     def __init__(self):
         super().__init__()
 
-        body = [BasicBlock(3, 64, bn=False)]
-        for i in range(16):
+        body = [nn.Conv2d(3, 64, kernel_size=3, padding=1)]
+        for i in range(18):
             body.append(
                 BasicBlock(64, 64, bn=False)
             )
@@ -87,13 +87,7 @@ class PAB(nn.Module):
     def __init__(self, channels):
         super().__init__()
 
-        self.head = nn.Sequential(
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(channels, channels, kernel_size=3, padding=1, bias=True),
-            nn.ReLU(inplace=True),
-        )
-
+        self.head = BasicBlock(channels, channels, bn=False)
         self.query = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
         self.key = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
 
@@ -171,13 +165,13 @@ class CasPAM(nn.Module):
         # bottleneck in stage 2
         self.b2 = nn.Sequential(
             nn.Conv2d(128 + 96, 96, kernel_size=1, padding=0, bias=True),
-            nn.ReLU(inplace=True)
+            nn.LeakyReLU(inplace=True)
         )
 
         # bottleneck in stage 3
         self.b3 = nn.Sequential(
             nn.Conv2d(96 + 64, 64, kernel_size=1, padding=0, bias=True),
-            nn.ReLU(inplace=True)
+            nn.LeakyReLU(inplace=True)
         )
 
     def forward(self, fea_left, fea_right):
@@ -296,7 +290,7 @@ class Upsample(torch.nn.Module):
         self.upsample = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
-            nn.ReLU(inplace=True)
+            nn.LeakyReLU(inplace=True)
         )
 
     def forward(self, x):
@@ -308,7 +302,8 @@ class Transfer(nn.Module):
         super().__init__()
 
         self.body = nn.Sequential(
-            BasicBlock(64 + 64 + 1, 64, bn=False),
+            nn.Conv2d(64 + 64 + 1, 64, kernel_size=1, padding=0),
+            BasicBlock(64, 64, bn=False),
             BasicBlock(64, 64, bn=False),
             BasicBlock(64, 64, bn=False),
             BasicBlock(64, 64, bn=False),

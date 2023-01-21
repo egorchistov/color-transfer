@@ -24,7 +24,7 @@ import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 
 from methods.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle
-from methods.modules import FeatureExtration, PAM, output, Transfer
+from methods.modules import FeatureExtration, PAB as PAM, output, Transfer
 
 
 class DCMC(pl.LightningModule):
