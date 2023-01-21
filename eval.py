@@ -25,28 +25,30 @@ def run_nn(target, reference, model):
 
 
 if __name__ == "__main__":
-    image_dir = Path("datasets/dataset/Test")
+    for image_dir in [
+        Path("datasets/dataset/Test"),
+        Path("datasets/dataset/Real-Test")
+    ]:
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_CT.png", ct)
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_CTCCS.png", ct_ccs)
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_MKCT.png", mkct)
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_ACG.png", acg)
 
-    runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_CT.png", ct)
-    runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_CTCCS.png", ct_ccs)
-    runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_MKCT.png", mkct)
-    runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_ACG.png", acg)
+        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+        run = wandb.init()
 
-    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    run = wandb.init()
+        artifact = run.use_artifact("egorchistov/color-transfer/...", type="model")
+        artifact_dir = artifact.download()
+        dcmc = DCMC.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
+        dcmc.to(device)
+        dcmc.eval()
 
-    artifact = run.use_artifact("egorchistov/color-transfer/...", type="model")
-    artifact_dir = artifact.download()
-    dcmc = DCMC.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
-    dcmc.to(device)
-    dcmc.eval()
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png", partial(run_nn, model=dcmc))
 
-    runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png", partial(run_nn, model=dcmc))
+        artifact = run.use_artifact("egorchistov/color-transfer/...", type="model")
+        artifact_dir = artifact.download()
+        simp = SIMP.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
+        simp.to(device)
+        simp.eval()
 
-    artifact = run.use_artifact("egorchistov/color-transfer/...", type="model")
-    artifact_dir = artifact.download()
-    simp = SIMP.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
-    simp.to(device)
-    simp.eval()
-
-    runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_SIMP.png", partial(run_nn, model=simp))
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_SIMP.png", partial(run_nn, model=simp))
