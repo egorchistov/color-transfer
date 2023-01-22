@@ -45,7 +45,7 @@ if __name__ == "__main__":
 
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png", partial(run_nn, model=dcmc))
 
-        artifact = run.use_artifact("egorchistov/color-transfer/...", type="model")
+        artifact = run.use_artifact("egorchistov/color-transfer/model-37hlx8fn:v4", type="model")
         artifact_dir = artifact.download()
         simp = SIMP.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
         simp.to(device)
