@@ -15,9 +15,9 @@ from methods.iterative import automated_color_grading as acg
 
 
 @torch.no_grad()
-def run_nn(target, reference, model):
-    target = image_to_tensor(target, keepdim=False).float()
-    reference = image_to_tensor(reference, keepdim=False).float()
+def run_nn(target, reference, device, model):
+    target = image_to_tensor(target, keepdim=False).float().to(device)
+    reference = image_to_tensor(reference, keepdim=False).float().to(device)
 
     corrected_left, _ = model(target, reference)
 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
         dcmc.to(device)
         dcmc.eval()
 
-        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png", partial(run_nn, model=dcmc))
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png", partial(run_nn, device=device, model=dcmc))
 
         artifact = run.use_artifact("egorchistov/color-transfer/model-37hlx8fn:v4", type="model")
         artifact_dir = artifact.download()
@@ -51,4 +51,4 @@ if __name__ == "__main__":
         simp.to(device)
         simp.eval()
 
-        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_SIMP.png", partial(run_nn, model=simp))
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_SIMP.png", partial(run_nn, device=device, model=simp))
