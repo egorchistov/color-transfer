@@ -37,7 +37,7 @@ if __name__ == "__main__":
         device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
         run = wandb.init()
 
-        artifact = run.use_artifact("egorchistov/color-transfer/...", type="model")
+        artifact = run.use_artifact("egorchistov/color-transfer/model-3puv6agg:v1", type="model")
         artifact_dir = artifact.download()
         dcmc = DCMC.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
         dcmc.to(device)
