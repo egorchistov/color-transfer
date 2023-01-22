@@ -69,7 +69,7 @@ wandb_logger = WandbLogger(project="color-transfer", log_model="all")
 
 checkpoint = pl.callbacks.ModelCheckpoint(
     monitor="Loss",
-    every_n_epochs=25,
+    every_n_epochs=20,
     save_top_k=-1)
 
 trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint], logger=wandb_logger)
