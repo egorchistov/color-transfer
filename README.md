@@ -36,9 +36,7 @@ Color transfer is a&nbsp;method of&nbsp;transforming the color of&nbsp;a&nbsp;ta
 
 5. Croci&nbsp;et&nbsp;al., "Deep Color Mismatch Correction in&nbsp;Stereoscopic 3D Images", 2021
 
-    ```python
-    from methods.dcmc import deep_color_mismatch_correction as dcmc
-    ```
+    This method requires complex initialization. See usage example in `eval.py` file
 
 ## How to Use
 
@@ -59,15 +57,30 @@ from methods.linear import monge_kantorovitch_color_transfer as mkct
 
 # You can use this runner to apply any color transfer method to a video or a frame sequence.
 # It uses OpenCV backend and accepts many formats.
-runner("images/0_target.png", "images/0_reference.png", "images/0_mkct.png", mkct)
+runner("target.png", "reference.png", "corrected.png", mkct)
 # runner("target/%04d.png", "reference/%04d.png", "corrected/%04d.png", mkct)
 # runner("target.mp4", "reference.mp4", "corrected.mp4", mkct)
 ```
 
-## Available Datasets
+## Model Training
 
-Below you can find two processed datasets. Preparation scripts can be found in datasets folder
+Download [dataset](https://www.kaggle.com/datasets/egorchistov/dcmc-dataset) first and use this command to start training:
 
-1. [Stereo Color and Sharpness Mismatch Dataset](https://videoprocessing.ai/datasets/stereo-mismatch.html)
-2. [Deep Color Mismatch Correction in Stereoscopic 3D Images Dataset](https://www.kaggle.com/datasets/egorchistov/dcmc-dataset)
+```shell
+python train.py  \
+  --model=SIMP  \
+  --dataset_path=datasets/dataset  \
+  --num_workers=16  \
+  --accelerator=gpu  \
+  --img_height=256  \
+  --img_width=512  \
+  --batch_size=16  \
+  --max_epochs=100  \
+  --check_val_every_n_epoch=10
+```
 
+## See Also
+
+* [Real-World Stereo Color and Sharpness Mismatch Dataset](https://videoprocessing.ai/datasets/stereo-mismatch.html)
+
+   Our attempt in creating a real-world video dataset for the color and sharpness correction task in stereoscopic 3D video
