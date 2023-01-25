@@ -12,6 +12,7 @@ from kornia.metrics import psnr, ssim
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 
+from methods.losses import loss_pam_photometric_multiscale, loss_pam_cycle_multiscale, loss_pam_smoothness_multiscale
 from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiScaleTransfer
 
 
@@ -80,12 +81,19 @@ class SIMP(pl.LightningModule):
 
         corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
 
+        loss_pm = loss_pam_photometric_multiscale(left, right, att, valid_mask)
+        loss_smooth = 0.1 * loss_pam_smoothness_multiscale(att)
+        loss_cycle = loss_pam_cycle_multiscale(att_cycle, valid_mask)
+
         loss_cc = F.l1_loss(corrected_left, left_gt) + \
             F.mse_loss(corrected_left, left_gt) + \
             ssim_loss(corrected_left, left_gt, window_size=11)
 
-        loss = loss_cc
+        loss = loss_cc + 0.005 * (loss_pm + loss_smooth + loss_cycle)
 
+        self.log("Photometric Loss", 0.005 * loss_pm)
+        self.log("Smoothness Loss",  0.005 * loss_smooth)
+        self.log("Cycle Loss",  0.005 * loss_cycle)
         self.log("Color Correction Loss", loss_cc)
         self.log("Loss", loss)
 
