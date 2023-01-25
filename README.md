@@ -76,7 +76,7 @@ python train.py  \
   --img_width=512  \
   --batch_size=16  \
   --max_epochs=100  \
-  --check_val_every_n_epoch=10
+  --check_val_every_n_epoch=5
 ```
 
 ## See Also

@@ -65,12 +65,12 @@ model = {
     Model.SIMP: SIMP()
 }[args.model]
 
-wandb_logger = WandbLogger(project="color-transfer", log_model="all")
+wandb_logger = WandbLogger(project="color-transfer", log_model=True)
 
 checkpoint = pl.callbacks.ModelCheckpoint(
-    monitor="Loss",
-    every_n_epochs=20,
-    save_top_k=-1)
+    monitor="PSNR",
+    every_n_epochs=5,
+    mode="max")
 
 trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint], logger=wandb_logger)
 trainer.fit(model, datamodule)
