@@ -302,7 +302,7 @@ class Transfer(nn.Module):
         super().__init__()
 
         self.body = nn.Sequential(
-            nn.Conv2d(64 + 64 + 1, 64, kernel_size=1, padding=0),
+            nn.Conv2d(64 + 64 + 1, 64, kernel_size=1),
             BasicBlock(64, 64, bn=False),
             BasicBlock(64, 64, bn=False),
             BasicBlock(64, 64, bn=False),

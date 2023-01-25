@@ -24,7 +24,7 @@ import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 
 from methods.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle
-from methods.modules import FeatureExtration, PAB as PAM, output, Transfer
+from methods.modules import FeatureExtration, PAB, output, Transfer
 
 
 class DCMC(pl.LightningModule):
@@ -33,7 +33,8 @@ class DCMC(pl.LightningModule):
         self.learning_rate = learning_rate
 
         self.extraction = FeatureExtration()
-        self.pam = PAM(channels=64)
+        self.pam = PAB(channels=64)
+        self.value = torch.nn.Conv2d(64, 64, kernel_size=1)
         self.transfer = Transfer()
 
     def forward(self, left, right):
@@ -42,16 +43,11 @@ class DCMC(pl.LightningModule):
 
         b, _, h, w = fea_left.shape
 
-        cost = [
-            torch.zeros(b, h, w, w).to(fea_right.device),
-            torch.zeros(b, h, w, w).to(fea_right.device)
-        ]
-
-        _, _, cost = self.pam(fea_left, fea_right, cost)
+        _, _, cost = self.pam(fea_left, fea_right, cost=(0, 0))
 
         att, att_cycle, valid_mask = output(cost)
 
-        fea_warped_right = torch.matmul(att[0], fea_right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        fea_warped_right = torch.matmul(att[0], self.value(fea_right).permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
         corrected_left = self.transfer(fea_left, fea_warped_right, valid_mask)
 
