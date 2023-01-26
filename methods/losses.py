@@ -1,4 +1,5 @@
 import torch
+import torchvision
 import torch.nn.functional as F
 
 
@@ -80,3 +81,51 @@ def loss_pam_smoothness_multiscale(att):
         loss = loss + weight[idx_scale] * loss_scale
 
     return loss
+
+
+class VGGPerceptualLoss(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        features = torchvision.models.vgg16(weights="DEFAULT").features
+
+        self.blocks = torch.nn.Sequential(
+            features[:4],
+            features[4:9],
+            features[9:16],
+            features[16:23]
+        )
+
+        self.blocks.eval()
+
+        for block in self.blocks:
+            for p in block.parameters():
+                p.requires_grad = False
+
+        self.register_buffer("mean", torch.tensor([0.485, 0.456, 0.406]).reshape(1, 3, 1, 1))
+        self.register_buffer("std", torch.tensor([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1))
+
+    def forward(self, corrected, content_target, style_target):
+        corrected = (corrected - self.mean) / self.std
+        style_target = (style_target - self.mean) / self.std
+        content_target = (content_target - self.mean) / self.std
+
+        loss = 0
+
+        for block in self.blocks:
+            corrected = block(corrected)
+            style_target = block(style_target)
+            content_target = block(content_target)
+
+            loss += F.mse_loss(corrected, content_target)
+
+            _, c, h, w = corrected.shape
+
+            act_x = corrected.reshape(corrected.shape[0], corrected.shape[1], -1)
+            act_y = style_target.reshape(style_target.shape[0], style_target.shape[1], -1)
+            gram_x = act_x @ act_x.permute(0, 2, 1) / (c * h * w)
+            gram_y = act_y @ act_y.permute(0, 2, 1) / (c * h * w)
+
+            loss += 5 * F.mse_loss(gram_x, gram_y)
+
+        return loss
