@@ -12,7 +12,7 @@ from kornia.metrics import psnr, ssim
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 
-from methods.losses import loss_pam_photometric_multiscale, loss_pam_cycle_multiscale, loss_pam_smoothness_multiscale, VGGPerceptualLoss
+from methods.losses import loss_pam_photometric_multiscale, loss_pam_cycle_multiscale, loss_pam_smoothness_multiscale
 from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiScaleTransfer
 
 
@@ -29,7 +29,6 @@ class SIMP(pl.LightningModule):
         self.extraction = MultiScaleFeatureExtration()
         self.cas_pam = CasPAM()
         self.transfer = MultiScaleTransfer()
-        self.loss_perceptual = VGGPerceptualLoss()
 
     def forward(self, left, right):
         b, _, h, w = left.shape
@@ -88,8 +87,7 @@ class SIMP(pl.LightningModule):
 
         loss_cc = F.l1_loss(corrected_left, left_gt) + \
             F.mse_loss(corrected_left, left_gt) + \
-            ssim_loss(corrected_left, left_gt, window_size=11) + \
-            0.05 * self.loss_perceptual(corrected_left, left, right)
+            ssim_loss(corrected_left, left_gt, window_size=11)
 
         loss = loss_cc + 0.005 * (loss_pm + loss_smooth + loss_cycle)
 
