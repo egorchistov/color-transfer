@@ -18,7 +18,7 @@ class BasicBlock(nn.Module):
         self.shortcut = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity()
-        )
+        ) if in_channels != out_channels else nn.Identity()
 
         self.relu = nn.LeakyReLU(inplace=True)
 
