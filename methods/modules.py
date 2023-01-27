@@ -268,11 +268,11 @@ def output(costs):
 
     # valid mask (left image)
     valid_mask_left = torch.sum(att_left2right.detach(), dim=-2) > 0.1
-    valid_mask_left = valid_mask_left.unsqueeze(dim=1).detach()
+    valid_mask_left = valid_mask_left.unsqueeze(dim=1)
 
     # valid mask (right image)
     valid_mask_right = torch.sum(att_right2left.detach(), dim=-2) > 0.1
-    valid_mask_right = valid_mask_right.unsqueeze(dim=1).detach()
+    valid_mask_right = valid_mask_right.unsqueeze(dim=1)
 
     # cycle-attention maps
     att_left2right2left = torch.matmul(att_right2left, att_left2right)
