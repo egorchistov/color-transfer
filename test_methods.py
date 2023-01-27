@@ -54,10 +54,10 @@ def test_train_model(model):
             "--batch_size=1",
             "--img_height=64",
             "--img_width=64",
+            "--num_workers=1",
             "--limit_train_batches=1",
             "--limit_val_batches=1",
-            "--max_epochs=1",
-            "--num_workers=1"
+            "--max_epochs=1"
         ]
     )
 

@@ -67,16 +67,15 @@ runner("target.png", "reference.png", "corrected.png", mkct)
 Download [dataset](https://www.kaggle.com/datasets/egorchistov/dcmc-dataset) first and use this command to start training:
 
 ```shell
-python train.py  \
-  --model=SIMP  \
-  --dataset_path=datasets/dataset  \
-  --num_workers=16  \
-  --accelerator=gpu  \
-  --img_height=256  \
-  --img_width=512  \
-  --batch_size=16  \
-  --max_epochs=100  \
-  --check_val_every_n_epoch=5
+python train.py \
+   --model=SIMP \  # or DCMC
+   --dataset_path=datasets/dataset \
+   --batch_size=16  \
+   --img_height=256 \
+   --img_width=512  \
+   --num_workers=16  \
+   --accelerator=gpu \
+   --max_epochs=100
 ```
 
 ## See Also

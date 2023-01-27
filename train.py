@@ -14,13 +14,12 @@ Then use this command to start training:
 python train.py \
     --model=SIMP \  # or DCMC
     --dataset_path=datasets/dataset \
-    --accelerator="gpu" \
     --batch_size=16  \
     --img_height=256 \
     --img_width=512  \
-    --max_epochs=100  \
-    --num_workers=2  \
-    --check_val_every_n_epoch=5
+    --num_workers=16  \
+    --accelerator=gpu \
+    --max_epochs=100
 ```
 """
 
@@ -66,11 +65,7 @@ model = {
 }[args.model]
 
 wandb_logger = WandbLogger(project="color-transfer", log_model=True)
-
-checkpoint = pl.callbacks.ModelCheckpoint(
-    monitor="PSNR",
-    every_n_epochs=5,
-    mode="max")
+checkpoint = pl.callbacks.ModelCheckpoint(monitor="PSNR", mode="max")
 
 trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint], logger=wandb_logger)
 trainer.fit(model, datamodule)
