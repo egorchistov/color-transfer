@@ -33,7 +33,7 @@ class DCMC(pl.LightningModule):
         self.learning_rate = learning_rate
 
         self.extraction = FeatureExtration()
-        self.pam = PAB(channels=64)
+        self.pam = PAB(channels=64, weighted_shortcut=False)
         self.value = torch.nn.Conv2d(64, 64, kernel_size=1)
         self.transfer = Transfer()
 

@@ -4,7 +4,7 @@ import torch.nn.functional as F
 
 
 class BasicBlock(nn.Module):
-    def __init__(self, in_channels, out_channels, stride=1, bn=True):
+    def __init__(self, in_channels, out_channels, stride=1, bn=True, weighted_shortcut=True):
         super().__init__()
 
         self.body = nn.Sequential(
@@ -18,7 +18,7 @@ class BasicBlock(nn.Module):
         self.shortcut = nn.Sequential(
             nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, padding=0, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity()
-        ) if in_channels != out_channels else nn.Identity()
+        ) if weighted_shortcut or in_channels != out_channels else nn.Identity()
 
         self.relu = nn.LeakyReLU(inplace=True)
 
@@ -33,7 +33,7 @@ class FeatureExtration(nn.Module):
         body = [nn.Conv2d(3, 64, kernel_size=3, padding=1)]
         for i in range(18):
             body.append(
-                BasicBlock(64, 64, bn=False)
+                BasicBlock(64, 64, bn=False, weighted_shortcut=False)
             )
         self.body = nn.Sequential(*body)
 
@@ -84,10 +84,10 @@ class MultiScaleFeatureExtration(nn.Module):
 
 
 class PAB(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, channels, weighted_shortcut=True):
         super().__init__()
 
-        self.head = BasicBlock(channels, channels, bn=False)
+        self.head = BasicBlock(channels, channels, bn=False, weighted_shortcut=weighted_shortcut)
         self.query = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
         self.key = nn.Conv2d(channels, channels, kernel_size=1, padding=0, bias=True)
 
@@ -303,12 +303,12 @@ class Transfer(nn.Module):
 
         self.body = nn.Sequential(
             nn.Conv2d(64 + 64 + 1, 64, kernel_size=1),
-            BasicBlock(64, 64, bn=False),
-            BasicBlock(64, 64, bn=False),
-            BasicBlock(64, 64, bn=False),
-            BasicBlock(64, 64, bn=False),
-            BasicBlock(64, 64, bn=False),
-            BasicBlock(64, 64, bn=False),
+            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
+            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
+            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
+            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
+            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
+            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
             nn.Conv2d(64, 32, kernel_size=3, padding=1),
             nn.Conv2d(32, 3, kernel_size=3, padding=1)
         )
