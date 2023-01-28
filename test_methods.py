@@ -50,6 +50,7 @@ def test_train_model(model):
             "python",
             "train.py",
             f"--model={model}",
+            "--learning_rate=1e-4",
             "--dataset_path=datasets/dataset",
             "--batch_size=1",
             "--img_height=64",
