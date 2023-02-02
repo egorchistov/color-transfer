@@ -53,6 +53,7 @@ parser.add_argument("--batch_size", type=int)
 parser.add_argument("--img_height", type=int)
 parser.add_argument("--img_width", type=int)
 parser.add_argument("--num_workers", type=int)
+parser.add_argument("--use_real_distortions", action="store_true")
 parser = pl.Trainer.add_argparse_args(parser)
 args = parser.parse_args()
 
@@ -60,7 +61,8 @@ datamodule = CTDataModule(
     image_dir=Path(args.dataset_path),
     batch_size=args.batch_size,
     patch_size=(args.img_height, args.img_width),
-    num_workers=args.num_workers)
+    num_workers=args.num_workers,
+    use_real_distortions=args.use_real_distortions)
 
 model = {
     Model.DCMC: DCMC(learning_rate=args.learning_rate),

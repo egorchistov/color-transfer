@@ -32,6 +32,7 @@ class CTDataset(Dataset):
         """First distortions are applied to the left image, then transforms are applied to both"""
 
         self.lefts = sorted(image_dir.glob("*_L.png"))
+        self.lefts_distorted = sorted(image_dir.glob("*_LD.png"))
         self.rights = sorted(image_dir.glob("*_R.png"))
 
         assert len(self.lefts) == len(self.rights)
@@ -46,7 +47,10 @@ class CTDataset(Dataset):
         left_gt = np.array(Image.open(self.lefts[index]).convert("RGB"))
         right = np.array(Image.open(self.rights[index]).convert("RGB"))
 
-        left = self.distortions(image=left_gt)["image"]
+        if self.distortions is not None:
+            left = self.distortions(image=left_gt)["image"]
+        else:
+            left = np.array(Image.open(self.lefts_distorted[index]).convert("RGB"))
 
         t = self.transforms(image=left, left_gt=left_gt, right=right)
         left, left_gt, right = t["image"], t["left_gt"], t["right"]
@@ -55,13 +59,14 @@ class CTDataset(Dataset):
 
 
 class CTDataModule(pl.LightningDataModule):
-    def __init__(self, image_dir, batch_size, patch_size, num_workers):
+    def __init__(self, image_dir, batch_size, patch_size, num_workers, use_real_distortions):
         super().__init__()
 
         self.image_dir = image_dir
         self.batch_size = batch_size
         self.patch_size = patch_size
         self.num_workers = num_workers
+        self.use_real_distortions = use_real_distortions
 
         self.train = None
         self.val = None
@@ -76,7 +81,7 @@ class CTDataModule(pl.LightningDataModule):
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
 
-            self.train = CTDataset(self.image_dir / "Train", train_transforms, distortions)
+            self.train = CTDataset(self.image_dir / "Train", train_transforms, distortions if not self.use_real_distortions else None)
 
             val_transforms = A.Compose([
                 A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
@@ -85,7 +90,7 @@ class CTDataModule(pl.LightningDataModule):
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
 
-            self.val = CTDataset(self.image_dir / "Validation", val_transforms, distortions)
+            self.val = CTDataset(self.image_dir / "Validation", val_transforms, distortions if not self.use_real_distortions else None)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
