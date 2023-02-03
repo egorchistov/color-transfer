@@ -1,3 +1,12 @@
+"""Real-World Stereo Color and Sharpness Mismatch Dataset Postprocessing
+
+This script is used for our dataset postprocessing as described
+at https://videoprocessing.ai/datasets/stereo-mismatch.html#methodology
+
+Download dataset sources, adjust json configuration files if you need,
+and then run this script.
+"""
+
 import argparse
 import json
 import os
