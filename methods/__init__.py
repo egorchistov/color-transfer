@@ -51,7 +51,10 @@ def runner(target_mask, reference_mask, corrected_mask, method):
                 if not ret_target or not ret_reference:
                     break
 
-                corrected = img_as_ubyte(method(img_as_float(target), img_as_float(reference)).clip(0, 1))
+                target = img_as_float(cv2.cvtColor(target, cv2.COLOR_BGR2RGB))
+                reference = img_as_float(cv2.cvtColor(reference, cv2.COLOR_BGR2RGB))
+                corrected = method(target, reference).clip(0, 1)
+                corrected = cv2.cvtColor(img_as_ubyte(corrected), cv2.COLOR_RGB2BGR)
 
                 cap_corrected.write(corrected)
                 pbar.update(1)
