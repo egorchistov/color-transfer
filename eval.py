@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from functools import partial
 
@@ -25,29 +26,33 @@ def run_nn(target, reference, device, model):
 
 
 if __name__ == "__main__":
-    for image_dir in [
+    datasets = [
         Path("datasets/dataset/Test"),
-        Path("datasets/dataset/Real-Test")
-    ]:
+        Path("datasets/Real-512x512/Test")
+    ]
+
+    for image_dir in datasets:
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_CT.png", ct)
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_CTCCS.png", ct_ccs)
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_MKCT.png", mkct)
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_ACG.png", acg)
 
-        device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-        run = wandb.init()
+    device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+    run = wandb.init()
 
-        artifact = run.use_artifact("egorchistov/color-transfer/model-1v459lhl:v0", type="model")
+    for image_dir, model in zip(datasets, ["1v459lhl:v0", "23zxip9a:v0"]):
+        artifact = run.use_artifact(f"egorchistov/color-transfer/model-{model}", type="model")
         artifact_dir = artifact.download()
-        dcmc = DCMC.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
+        dcmc = DCMC.load_from_checkpoint(os.path.join(artifact_dir, "model.ckpt"))
         dcmc.to(device)
         dcmc.eval()
 
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png", partial(run_nn, device=device, model=dcmc))
 
-        artifact = run.use_artifact("egorchistov/color-transfer/model-14rto6rl:v5", type="model")
+    for image_dir, model in zip(datasets, ["14rto6rl:v5", "m19plwtk:v0"]):
+        artifact = run.use_artifact(f"egorchistov/color-transfer/model-{model}", type="model")
         artifact_dir = artifact.download()
-        simp = SIMP.load_from_checkpoint(Path(artifact_dir).resolve() / "model.ckpt")
+        simp = SIMP.load_from_checkpoint(os.path.join(artifact_dir, "model.ckpt"))
         simp.to(device)
         simp.eval()
 
