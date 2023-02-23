@@ -324,26 +324,26 @@ class MultiScaleTransfer(nn.Module):
         super().__init__()
 
         self.decoder = nn.Sequential(
-            BasicBlock(2 * 128, 2 * 128, bn=False),
-            BasicBlock(2 * 96, 2 * 96, bn=False),
-            BasicBlock(2 * 64, 2 * 64, bn=False),
-            BasicBlock(2 * 32, 2 * 32, bn=False),
-            BasicBlock(2 * 16, 2 * 16, bn=False)
+            BasicBlock(2 * 128 + 1, 2 * 128 + 1, bn=False),
+            BasicBlock(2 * 96 + 1, 2 * 96 + 1, bn=False),
+            BasicBlock(2 * 64 + 1, 2 * 64 + 1, bn=False),
+            BasicBlock(2 * 32 + 1, 2 * 32 + 1, bn=False),
+            BasicBlock(2 * 16 + 1, 2 * 16 + 1, bn=False)
         )
 
         self.upsample = nn.Sequential(
-            Upsample(2 * 160, 2 * 128, bn=False),
-            Upsample(2 * 128, 2 * 96, bn=False),
-            Upsample(2 * 96, 2 * 64, bn=False),
-            Upsample(2 * 64, 2 * 32, bn=False),
-            Upsample(2 * 32, 2 * 16, bn=False)
+            Upsample(2 * 160 + 1, 2 * 128 + 1, bn=False),
+            Upsample(2 * 128 + 1, 2 * 96 + 1, bn=False),
+            Upsample(2 * 96 + 1, 2 * 64 + 1, bn=False),
+            Upsample(2 * 64 + 1, 2 * 32 + 1, bn=False),
+            Upsample(2 * 32 + 1, 2 * 16 + 1, bn=False)
         )
 
-        self.bias = nn.Conv2d(2 * 16, 3, kernel_size=1, padding=0, bias=True)
+        self.bias = nn.Conv2d(2 * 16 + 1, 3, kernel_size=1, padding=0, bias=True)
 
-    def forward(self, fea_left, fea_right):
+    def forward(self, fea_left, fea_right, valid_masks):
         features = [
-            torch.cat([left, right], dim=1) for left, right in zip(fea_left, fea_right)
+            torch.cat([left, right, valid_mask], dim=1) for left, right, valid_mask in zip(fea_left, fea_right, valid_masks)
         ]
 
         x = features[5]

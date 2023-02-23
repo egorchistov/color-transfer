@@ -65,7 +65,16 @@ class SIMP(pl.LightningModule):
             )
         ]
 
-        corrected_left = self.transfer(fea_left[:-3], fea_warped_right)
+        valid_masks = [
+            F.interpolate(valid_mask_s3[0].float(), scale_factor=4, mode="nearest"),
+            F.interpolate(valid_mask_s3[0].float(), scale_factor=2, mode="nearest"),
+            valid_mask_s3[0],
+            valid_mask_s2[0],
+            valid_mask_s1[0],
+            F.interpolate(valid_mask_s1[0].float(), scale_factor=0.5, mode="nearest")
+        ]
+
+        corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
 
         warped_right = torch.matmul(att_s5[0], right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
