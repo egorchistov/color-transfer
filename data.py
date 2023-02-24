@@ -28,7 +28,7 @@ distortions = A.OneOf([
 
 
 class CTDataset(Dataset):
-    def __init__(self, image_dir: Path, transforms, distortions):
+    def __init__(self, image_dir: Path, transforms, distortions, use_real_distortions):
         """First distortions are applied to the left image, then transforms are applied to both"""
 
         self.lefts = sorted(image_dir.glob("*_L.png"))
@@ -39,6 +39,7 @@ class CTDataset(Dataset):
 
         self.transforms = transforms
         self.distortions = distortions
+        self.use_real_distortions = use_real_distortions
 
     def __len__(self):
         return len(self.lefts)
@@ -47,10 +48,12 @@ class CTDataset(Dataset):
         left_gt = np.array(Image.open(self.lefts[index]).convert("RGB"))
         right = np.array(Image.open(self.rights[index]).convert("RGB"))
 
-        if self.distortions is not None:
-            left = self.distortions(image=left_gt)["image"]
-        else:
+        if self.use_real_distortions:
             left = np.array(Image.open(self.lefts_distorted[index]).convert("RGB"))
+        else:
+            left = left_gt
+
+        left = self.distortions(image=left)["image"]
 
         t = self.transforms(image=left, left_gt=left_gt, right=right)
         left, left_gt, right = t["image"], t["left_gt"], t["right"]
@@ -81,7 +84,7 @@ class CTDataModule(pl.LightningDataModule):
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
 
-            self.train = CTDataset(self.image_dir / "Train", train_transforms, distortions if not self.use_real_distortions else None)
+            self.train = CTDataset(self.image_dir / "Train", train_transforms, distortions, self.use_real_distortions)
 
             val_transforms = A.Compose([
                 A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
@@ -90,7 +93,7 @@ class CTDataModule(pl.LightningDataModule):
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
 
-            self.val = CTDataset(self.image_dir / "Validation", val_transforms, distortions if not self.use_real_distortions else None)
+            self.val = CTDataset(self.image_dir / "Validation", val_transforms, distortions, self.use_real_distortions)
 
     def train_dataloader(self):
         return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
