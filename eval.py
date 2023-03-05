@@ -27,8 +27,8 @@ def run_nn(target, reference, device, model):
 
 if __name__ == "__main__":
     datasets = [
-        Path("datasets/dataset/Test"),
-        Path("datasets/Real-512x512/Test")
+        Path("Artificial-Dataset/Test"),
+        Path("Real-World-Dataset/Test")
     ]
 
     for image_dir in datasets:
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     run = wandb.init()
 
-    for image_dir, model in zip(datasets, ["1v459lhl:v0", "23zxip9a:v0"]):
+    for image_dir, model in zip(datasets, ["1v459lhl:v0", "1v459lhl:v0"]):
         artifact = run.use_artifact(f"egorchistov/color-transfer/model-{model}", type="model")
         artifact_dir = artifact.download()
         dcmc = DCMC.load_from_checkpoint(os.path.join(artifact_dir, "model.ckpt"))
@@ -49,7 +49,7 @@ if __name__ == "__main__":
 
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png", partial(run_nn, device=device, model=dcmc))
 
-    for image_dir, model in zip(datasets, ["14rto6rl:v5", "m19plwtk:v0"]):
+    for image_dir, model in zip(datasets, ["9rk4vdu5:v0", "3mqa2f4u:v0"]):
         artifact = run.use_artifact(f"egorchistov/color-transfer/model-{model}", type="model")
         artifact_dir = artifact.download()
         simp = SIMP.load_from_checkpoint(os.path.join(artifact_dir, "model.ckpt"))
