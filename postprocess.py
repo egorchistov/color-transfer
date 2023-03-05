@@ -140,6 +140,6 @@ if __name__ == "__main__":
 
             os.makedirs(os.path.join(args.output, sample), exist_ok=True)
 
-            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx + 1:04}_L.png"), left)
-            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx + 1:04}_L_GT.png"), left_gt)
-            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx + 1:04}_R.png"), right)
+            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx:04}_LD.png"), left)
+            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx:04}_L.png"), left_gt)
+            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx:04}_R.png"), right)
