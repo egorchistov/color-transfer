@@ -8,12 +8,10 @@ from skimage.transform import resize
 def iterative_distribution_transfer(target, reference, bins=255, n_iter=4):
     """Iterative Disribution Transfer
 
-    This method iteratively project target and reference images on random 1D axes
-    and perform probability density transfer according to that axis.
-
-    Links
-    -----
-    https://github.com/ptallada/colour_transfer
+    Pitié et al. proposed using an iterative-distribution fitting to transfer
+    color. This method iteratively projects target and reference images
+    on random one-dimensional axes and performs a probability-density transfer
+    along those axes.
 
     Citation
     --------
@@ -124,13 +122,11 @@ def _solve(img_arr_out,
 def automated_color_grading(target, reference):
     """Automated Colour Grading using Colour Distribution Transfer
 
-    This method iteratively project target and reference images on random 1D axes
-    and perform probability density transfer according to that axis. Then authors
-    reduce grain noise artifacts by minimizing cost function.
-
-    Links
-    -----
-    https://github.com/pengbo-learn/python-color-transfer
+    Pitié et al. proposed using an iterative-distribution fitting to transfer
+    color. This method iteratively projects target and reference images
+    on random one-dimensional axes and performs a probability-density transfer
+    along those axes. The authors reduced grain-noise artifacts by minimizing
+    a special cost function.
 
     Citation
     --------

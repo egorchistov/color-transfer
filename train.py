@@ -1,28 +1,3 @@
-"""Models Training Script
-
-Follow dataset preparation instructions in datasets package.
-Make sure that dataset is prepared correctly by running
-this command:
-
-```shell
-pyton data.py
-```
-
-Then use this command to start training:
-
-```shell
-python train.py \
-    --model=SIMP \  # or DCMC
-    --dataset_path=datasets/dataset \
-    --batch_size=16  \
-    --img_height=256 \
-    --img_width=512  \
-    --num_workers=16  \
-    --accelerator=gpu \
-    --max_epochs=100
-```
-"""
-
 import argparse
 from enum import Enum
 from pathlib import Path

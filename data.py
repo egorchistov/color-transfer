@@ -116,6 +116,7 @@ class CTDataModule(pl.LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = CTDataModule(Path("datasets/dataset"), batch_size=1, patch_size=(256, 512), num_workers=1)
+    datamodule = CTDataModule(Path("Artificial Dataset"), batch_size=1, patch_size=(256, 512), num_workers=0,
+                              use_real_distortions=False)
     datamodule.setup()
     datamodule.plot_example()

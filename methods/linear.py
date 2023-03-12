@@ -1,8 +1,4 @@
-"""Linear Color Transfer Methods
-
-The linear color transfer methods approximate image as an three-dimensional Gaussian
-distributed signal.
-"""
+"""Linear Color Transfer Methods"""
 
 import scipy
 import numpy as np
@@ -12,14 +8,11 @@ from skimage.color import rgb2lab, lab2rgb
 def color_transfer_between_images(target, reference):
     """Color Transfer between Images
 
-    This method use the simple statistical representation of an image as normal
-    distributed three-dimensional signal. Transfer from reference to target
-    is straightforward:
-
-    >>> corrected = (target - target_mean) * reference_std / target_std + reference_mean
-
-    Because RGB color space is higly correlated, authors used LAB color space. Authors
-    suggest to use clusterization algorithms in order to transfer color between same objects.
+    Reinhard et al. proposed approximating an image as a three-dimensional
+    Gaussian distributed signal. For each channel in the CIELAB color space,
+    they used a linear model to transfer color from a reference image to the
+    target image. They chose CIELAB because it is uncorrelated and allowed
+    them to independently manipulate all three color channels.
 
     Citation
     --------
@@ -57,18 +50,11 @@ def color_transfer_between_images(target, reference):
 def color_transfer_in_correlated_color_space(target, reference):
     """Color Transfer in Correlated Color Space
 
-    This method perform color transfer in correlated color space. To achieve this authors
-    compute covariance between three color components, because covariane matrix is the
-    extension of standard deviation in correlated space.
-
-    Authors describe transformation in form of a scale, rotation and shift of pixel
-    clusters. They decompose covariance matrix using SVD algorithm and determine
-    transformation using geometric meaning of SVD.
-
-    See also
-    --------
-    About geometric meaning of SVD
-        https://en.wikipedia.org/wiki/Singular_value_decomposition
+    Xiao et al. computed a covariance matrix between color channels instead of treating
+    them independently, because that matrix is the extension of standard deviation
+    in correlated space. The authors decomposed the covariance matrix using the SVD
+    algorithm. They described the transformation as a scale, rotation, and shift
+    of pixel clusters.
 
     Citation
     --------
@@ -80,7 +66,6 @@ def color_transfer_in_correlated_color_space(target, reference):
       year={2006}
     }
     """
-
     shape = target.shape
 
     target = target.reshape(-1, 3)
@@ -110,16 +95,10 @@ def color_transfer_in_correlated_color_space(target, reference):
 def monge_kantorovitch_color_transfer(target, reference, decomposition="MK"):
     """The Linear Monge-Kantorovitch Linear Colour Mapping for Example-Based Colour Transfer
 
-    Authors generalize all linear color transfer approaches to this system of equations:
-
-    corrected == T @ (target - target_mean) + reference_mean
-    T @ cov_target T.T == cov_reference
-    T = B @ Q @ A^-1 with Q.T @ Q = I
-
-    where T can be decomposed in three different ways using:
-    - "cholesky" — cholesky decomposition
-    - "sqrt" — square root decomposition
-    - "MK" — linear Monge-Kantorovitch solution
+    Pitié et al. generalized all linear color-transfer approaches
+    to the covariance-matrix fitting. They showed that the matrix decomposition
+    this fitting implies can use the Cholesky decomposition, the square-root
+    decomposition, or the solution to the Monge-Kantorovitch problem.
 
     Implementation has `decomposition` parameter to choose one of these approaches.
 

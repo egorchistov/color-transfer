@@ -1,5 +1,11 @@
 """Deep Color Mismatch Correction in Stereoscopic 3D Images
 
+Croci et al. employed a convolutional neural network for color-mismatch
+correction. First, the network extracts features from the input stereopair.
+It then feeds the extracted features into the parallax-attention mechanism,
+which performs stereo matching. Matched features pass through six residual
+blocks to yield the corrected stereoscopic view.
+
 Citation
 --------
 @inproceedings{croci2021deep,
@@ -10,10 +16,6 @@ Citation
   year={2021},
   organization={IEEE}
 }
-
-Links
------
-https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM
 """
 
 import torch

@@ -1,14 +1,15 @@
-"""Colot Transfer Methods
+"""Colot Mismatch Correction Methods
 
-Color transfer is the method of transforming the color of a target image
-so that the color becomes more consistent with the reference image.
+Color-mismatch correction is the task of transferring color from one view
+of a stereopair to corresponding areas in another where the colors differ
+incorrectly.
 
 All methods implement the same interface with target and reference arguments:
 
 corrected = method(target, reference)
 
-corrected image will preserve structure from target image and color from reference.
-
+The corrected view should have a structure consistent with that of the target view and
+colors consistent with those of the reference view.
 """
 
 from pathlib import Path
@@ -19,15 +20,12 @@ from tqdm import tqdm
 
 
 def runner(target_mask, reference_mask, corrected_mask, method):
-    """Color Transfer Runner
-
-    This runner can be used to apply any color transfer method to a video
+    """This runner can be used to apply any method to a video
     or a frame sequence. It used OpenCV backend and accept many formats.
 
-    >>> from methods.linear import color_transfer_in_correlated_color_space as ct_ccs
-    >>> runner("target.png", "reference.png", "corrected.png", ct_ccs)
-    >>> runner("target/%04d.png", "reference/%04d.png", "corrected/%04d.png", ct_ccs)
-    >>> runner("target.mp4", "reference.mp4", "corrected.mp4", ct_ccs)
+    >>> from methods.linear import monge_kantorovitch_color_transfer as mkct
+    >>> runner("graphics/%04d_LD.png", "graphics/%04d_R.png", "graphics/%04d_MKCT.png", mkct)
+    >>> runner("LD.mp4", "R.mp4", "MKCT.mp4", mkct)
     """
     Path(corrected_mask).parent.mkdir(parents=True, exist_ok=True)
 

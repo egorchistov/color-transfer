@@ -1,4 +1,4 @@
-"""Real-World Stereo Color and Sharpness Mismatch Dataset Postprocessing
+"""Real-World Stereo Color and Sharpness Mismatch Dataset Postprocessing Script
 
 This script is used for our dataset postprocessing as described
 at https://videoprocessing.ai/datasets/stereo-mismatch.html#methodology
@@ -63,6 +63,8 @@ def estimate_homography(target, reference, method="SIFT"):
 
         target_keypoints = correspondences_dict["keypoints0"].numpy() * scale
         reference_keypoints = correspondences_dict["keypoints1"].numpy() * scale
+    else:
+        raise ValueError(f"Unknown method: {method}")
 
     homography, _ = cv2.findHomography(
         target_keypoints,
@@ -103,10 +105,10 @@ def frames(args, params, sample):
 if __name__ == "__main__":
     args = parse_args()
 
-    if args.samples is None:
-        args.samples = sorted(os.listdir(args.root))
-    else:
+    if isinstance(args.samples, str):
         args.samples = args.samples.split(",")
+    else:
+        args.samples = sorted(os.listdir(args.root))
 
     for sample in tqdm(args.samples, desc="Samples"):
         with open(os.path.join(args.root, sample, "params.json"), "r") as f:

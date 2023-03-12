@@ -2,7 +2,7 @@ import subprocess
 from functools import partial
 
 import pytest
-from skimage import img_as_float
+from skimage.util import img_as_float
 from skimage.data import chelsea
 from skimage.metrics import peak_signal_noise_ratio as psnr
 
@@ -23,11 +23,7 @@ from methods.iterative import automated_color_grading
     automated_color_grading,
 ])
 def test_method(method):
-    """Test Color Transfer Methods
-
-    This test creates simple linear distortion which should be easily corrected
-    by any method.
-    """
+    """Create artificial distortions which should be easily corrected by any method"""
     image_true = img_as_float(chelsea())
 
     image_test = 1.15 * image_true + 0.2
@@ -45,12 +41,13 @@ def test_method(method):
 
 @pytest.mark.parametrize("model", ["DCMC", "SIMP"])
 def test_train_model(model):
+    """Run training script for neural-network based methods"""
     p = subprocess.run(
         [
             "python",
             "train.py",
             f"--model={model}",
-            "--dataset_path=datasets/dataset",
+            "--dataset_path=Artificial Dataset",
             "--batch_size=1",
             "--img_height=64",
             "--img_width=64",
