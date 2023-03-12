@@ -1,85 +1,85 @@
-# Color Transfer
+<h1 align="center">Color Mismatches in Stereoscopic Video: Real-World Dataset and Deep Correction Method</h1>
 
-Color transfer is a&nbsp;method of&nbsp;transforming the color of&nbsp;a&nbsp;target image so that it becomes consistent with the color of&nbsp;the&nbsp;reference image. This repo is&nbsp;an&nbsp;open source color transfer methods and datasets collection. Feel free to&nbsp;submit any method or&nbsp;dataset.
+<p align="center">
+    <a href="https://github.com/egorchistov">Egor Chistov</a>
+    ·
+    <a href="https://github.com/illaitar">Nikita Alutis</a>
+    ·
+    <a href="https://istina.msu.ru/workers/288185986/">Maxim Velikanov</a>
+    ·
+    <a href="https://linkedin.com/in/dmitriyvatolin">Dmitriy Vatolin</a>
+</p>
 
-## Key Features
+<h3 align="center">
+    <a href="">Paper</a>
+    |
+    <a href="https://videoprocessing.ai/datasets/stereo-mismatch.html">Real-World Dataset</a>
+    |
+    <a href="https://wandb.ai/egorchistov/color-transfer">WandB</a>
+    |
+    <a href="https://colab.research.google.com/drive/1ETK4KniQwMl_8re-f5-qHc-pF4bIu07t?usp=sharing">Colab</a>
+</h3>
 
-* 5 available methods with common interface
-* 2 available datasets with the same structure
-* Easy to use interface to apply methods to images or videos
+<p align="center"><img src="graphics/distortion-example.webp" alt="Color Mismatch Example"></p>
+<p align="center"><i>Frame #1,200 from video “VR180 Cameras with Daydream,” taken by <a href="https://www.youtube.com/watch?v=TH MMXinRsA/">Google</a>, contains color mismatches.</i></p>
 
-## Available Methods
+<p align="center"><img src="graphics/method-architecture.webp" alt="Method Architecture"></p>
+<p align="center"><i>Overview of proposed method for color-mismatch correction. Multiscale features extracted from the stereopair feed into the cascaded parallax-attention mechanism, which performs stereo matching. Matched features passed through the multiscale transfer module to yield the corrected left view.</i></p>
 
-1. Reinhard&nbsp;et&nbsp;al., "Color Transfer between Images", 2001
+Color-mismatch correction is the task of transferring color from one view of a stereopair to corresponding areas in another where the colors differ incorrectly.
 
-    ```python
-    from methods.linear import color_transfer_between_images as ct
-    ```
+This repo contains **two datasets** and **six** color-mismatch correction **methods**.
 
-2. Xiao&nbsp;et&nbsp;al., "Color Transfer in&nbsp;Correlated Color Space", 2006
+## Installation
 
-    ```python
-    from methods.linear import color_transfer_in_correlated_color_space as ct_ccs
-    ```
-
-3. Pitie&nbsp;et&nbsp;al., "The Linear Monge-Kantorovitch Linear Colour Mapping for&nbsp;Example-Based Colour Transfer", 2007
-
-    ```python
-    from methods.linear import monge_kantorovitch_color_transfer as mkct
-    ```
-
-4. Pitie&nbsp;et&nbsp;al., "Automated Colour Grading using Colour Distribution Transfer", 2007
-
-    ```python
-    from methods.iterative import automated_color_grading as acg
-    ```
-
-5. Croci&nbsp;et&nbsp;al., "Deep Color Mismatch Correction in&nbsp;Stereoscopic 3D Images", 2021
-
-    This method requires complex initialization. See usage example in `eval.py` file
-
-## How to Use
-
-First clone this repo and install dependencies:
+Our code is developed based on pytorch 1.12, pytorch-lightning 1.7, and python 3.10. Other versions should also work well. Clone this repo and install dependencies:
 
 ```shell
-git clone git@github.com:egorchistov/color-transfer.git
+git clone https://github.com/egorchistov/color-transfer.git
 cd color-transfer
-pip install -r requirements.txt
+pip install -qr requirements.txt
 ```
 
-Then use this simple python script to&nbsp;run color transfer:
+## Demo
 
-```python
-from methods import runner
-# You can use other methods instead. See available methods above
-from methods.linear import monge_kantorovitch_color_transfer as mkct
+Given an image pair or a video sequence, our code supports generating color correction results. Please refer to [colab](https://colab.research.google.com/drive/1ETK4KniQwMl_8re-f5-qHc-pF4bIu07t?usp=sharing) and `eval.py` file for example usages.
 
-# You can use this runner to apply any color transfer method to a video or a frame sequence.
-# It uses OpenCV backend and accepts many formats.
-runner("target.png", "reference.png", "corrected.png", mkct)
-# runner("target/%04d.png", "reference/%04d.png", "corrected/%04d.png", mkct)
-# runner("target.mp4", "reference.mp4", "corrected.mp4", mkct)
-```
+<p align="center"><img src="graphics/methods-comparison.webp" alt="Color-Mismatch-Correction Methods Comparison"></p>
+<p align="center"><i>Examples of color-mismatch correction. The first stereopair is from the artificial dataset; the second is from the real-world dataset.</i></p>
 
-## Model Training
+## Datasets
 
-Download [dataset](https://www.kaggle.com/datasets/egorchistov/dcmc-dataset) first and use this command to start training:
+We created the following datasets to train and evaluate available models:
+
+* [Artificial Dataset](https://www.kaggle.com/datasets/egorchistov/dcmc-dataset) — 1035 stereopairs
+* [Real-World Dataset](https://videoprocessing.ai/datasets/stereo-mismatch.html) — 1200 stereopairs
+
+## Training
+
+Use this command to start training:
 
 ```shell
 python train.py \
-   --model=SIMP \  # or DCMC
-   --dataset_path=datasets/dataset \
-   --batch_size=16  \
-   --img_height=256 \
-   --img_width=512  \
-   --num_workers=16  \
-   --accelerator=gpu \
-   --max_epochs=100
+  --model=SIMP  \  # or DCMC
+  --dataset_path="Artificial Dataset" \
+  --batch_size=16   \
+  --img_height=256  \
+  --img_width=512   \
+  --num_workers=16  \
+  --accelerator=gpu \
+  --max_epochs=100
 ```
 
-## See Also
+Refer to [WandB](http://wandb.ai/egorchistov/color-transfer) for training history of available models.
 
-* [Real-World Stereo Color and Sharpness Mismatch Dataset](https://videoprocessing.ai/datasets/stereo-mismatch.html)
+Run the `eval.py` file to reproduce the numbers in our paper.
 
-   Our attempt in creating a real-world video dataset for the color and sharpness correction task in stereoscopic 3D video
+## Citation
+
+```
+TBD
+```
+
+## Acknowledgements
+
+This project would not have been possible without relying on some awesome repos: [ptallada](https://github.com/ptallada/colour_transfer), [pengbo-learn](https://github.com/pengbo-learn/python-color-transfer), and [PAM](https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM). We thank the original authors for their excellent work.
