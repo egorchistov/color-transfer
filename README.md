@@ -69,7 +69,6 @@ Download [dataset](https://www.kaggle.com/datasets/egorchistov/dcmc-dataset) fir
 ```shell
 python train.py \
    --model=SIMP \  # or DCMC
-   --learning_rate=1e-4 \
    --dataset_path=datasets/dataset \
    --batch_size=16  \
    --img_height=256 \

@@ -13,7 +13,6 @@ Then use this command to start training:
 ```shell
 python train.py \
     --model=SIMP \  # or DCMC
-    --learning_rate=1e-4 \
     --dataset_path=datasets/dataset \
     --batch_size=16  \
     --img_height=256 \
@@ -29,7 +28,6 @@ from enum import Enum
 from pathlib import Path
 
 import pytorch_lightning as pl
-import wandb
 from pytorch_lightning.loggers import WandbLogger
 
 from data import CTDataModule
@@ -47,7 +45,6 @@ class Model(Enum):
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--model", type=Model, choices=list(Model))
-parser.add_argument("--learning_rate", type=float)
 parser.add_argument("--dataset_path", type=str)
 parser.add_argument("--batch_size", type=int)
 parser.add_argument("--img_height", type=int)
@@ -65,8 +62,8 @@ datamodule = CTDataModule(
     use_real_distortions=args.use_real_distortions)
 
 model = {
-    Model.DCMC: DCMC(learning_rate=args.learning_rate),
-    Model.SIMP: SIMP(learning_rate=args.learning_rate)
+    Model.DCMC: DCMC(),
+    Model.SIMP: SIMP()
 }[args.model]
 
 wandb_logger = WandbLogger(project="color-transfer", log_model=True)
