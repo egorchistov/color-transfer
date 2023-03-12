@@ -15,8 +15,20 @@ colors consistent with those of the reference view.
 from pathlib import Path
 
 import cv2
-from skimage import img_as_float, img_as_ubyte
+import torch
+from skimage.util import img_as_float, img_as_ubyte
+from kornia import image_to_tensor, tensor_to_image
 from tqdm import tqdm
+
+
+@torch.no_grad()
+def run_nn(target, reference, device, model):
+    target = image_to_tensor(target, keepdim=False).float().to(device)
+    reference = image_to_tensor(reference, keepdim=False).float().to(device)
+
+    corrected_left, _ = model(target, reference)
+
+    return tensor_to_image(corrected_left)
 
 
 def runner(target_mask, reference_mask, corrected_mask, method):

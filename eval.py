@@ -4,9 +4,8 @@ from functools import partial
 
 import torch
 import wandb
-from kornia import image_to_tensor, tensor_to_image
 
-from methods import runner
+from methods import run_nn, runner
 from methods.simp import SIMP
 from methods.dcmc import DCMC
 from methods.linear import color_transfer_between_images as ct
@@ -15,20 +14,10 @@ from methods.linear import monge_kantorovitch_color_transfer as mkct
 from methods.iterative import automated_color_grading as acg
 
 
-@torch.no_grad()
-def run_nn(target, reference, device, model):
-    target = image_to_tensor(target, keepdim=False).float().to(device)
-    reference = image_to_tensor(reference, keepdim=False).float().to(device)
-
-    corrected_left, _ = model(target, reference)
-
-    return tensor_to_image(corrected_left)
-
-
 if __name__ == "__main__":
     datasets = [
-        Path("Artificial-Dataset/Test"),
-        Path("Real-World-Dataset/Test")
+        Path("Artificial Dataset/Test"),
+        Path("Real-World Dataset/Test")
     ]
 
     for image_dir in datasets:
@@ -47,7 +36,8 @@ if __name__ == "__main__":
         dcmc.to(device)
         dcmc.eval()
 
-        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png", partial(run_nn, device=device, model=dcmc))
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png",
+               partial(run_nn, device=device, model=dcmc))
 
     for image_dir, model in zip(datasets, ["9rk4vdu5:v0", "3mqa2f4u:v0"]):
         artifact = run.use_artifact(f"egorchistov/color-transfer/model-{model}", type="model")
@@ -56,4 +46,5 @@ if __name__ == "__main__":
         simp.to(device)
         simp.eval()
 
-        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_SIMP.png", partial(run_nn, device=device, model=simp))
+        runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_SIMP.png",
+               partial(run_nn, device=device, model=simp))
