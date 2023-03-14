@@ -11,7 +11,7 @@
 </p>
 
 <h3 align="center">
-    <a href="">Paper</a>
+    <a href="https://arxiv.org/pdf/2303.06657">Paper</a>
     |
     <a href="https://videoprocessing.ai/datasets/stereo-mismatch.html">Real-World Dataset</a>
     |
@@ -77,9 +77,18 @@ Run the `eval.py` file to reproduce the numbers in our paper.
 ## Citation
 
 ```
-TBD
+@misc{chistov2023color,
+  author={Chistov, Egor and Alutis, Nikita and Velikanov, Maxim and Vatolin, Dmitriy},
+  title={Color Mismatches in Stereoscopic Video: Real-World Dataset and Deep Correction Method},
+  howpublished={arXiv:2303.06657 [cs.CV]},
+  year={2023}
+}
 ```
 
 ## Acknowledgements
 
 This project would not have been possible without relying on some awesome repos: [ptallada](https://github.com/ptallada/colour_transfer), [pengbo-learn](https://github.com/pengbo-learn/python-color-transfer), and [PAM](https://github.com/The-Learning-And-Vision-Atelier-LAVA/PAM). We thank the original authors for their excellent work.
+
+## See Also
+
+* [Real-World Stereo Color and Sharpness Mismatch Dataset](https://videoprocessing.ai/datasets/stereo-mismatch.html)

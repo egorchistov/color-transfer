@@ -13,7 +13,12 @@ For each scale we kept the channel count unchanged, as this table shows:
 
 Citation
 --------
-TBD
+@misc{chistov2023color,
+  author={Chistov, Egor and Alutis, Nikita and Velikanov, Maxim and Vatolin, Dmitriy},
+  title={Color Mismatches in Stereoscopic Video: Real-World Dataset and Deep Correction Method},
+  howpublished={arXiv:2303.06657 [cs.CV]},
+  year={2023}
+}
 """
 
 import torch
