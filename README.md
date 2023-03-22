@@ -11,7 +11,7 @@
 </p>
 
 <h3 align="center">
-    <a href="https://arxiv.org/pdf/2303.06657">Paper</a>
+    <a href="https://arxiv.org/abs/2303.06657">Paper</a>
     |
     <a href="https://videoprocessing.ai/datasets/stereo-mismatch.html">Real-World Dataset</a>
     |
