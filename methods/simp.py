@@ -28,8 +28,8 @@ from kornia.metrics import psnr, ssim
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
 
-from methods.losses import loss_pam_photometric_multiscale, loss_pam_cycle_multiscale, loss_pam_smoothness_multiscale
-from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiScaleTransfer
+from methods.losses import loss_pam_photometric, loss_pam_cycle, loss_pam_smoothness
+from methods.modules import MultiScaleFeatureExtration, PAM, output, MultiScaleTransfer
 
 
 class SIMP(pl.LightningModule):
@@ -37,7 +37,7 @@ class SIMP(pl.LightningModule):
         super().__init__()
 
         self.extraction = MultiScaleFeatureExtration()
-        self.cas_pam = CasPAM()
+        self.pam = PAM(96)
         self.transfer = MultiScaleTransfer()
 
     def forward(self, left, right):
@@ -46,52 +46,46 @@ class SIMP(pl.LightningModule):
         fea_left = self.extraction(left)
         fea_right = self.extraction(right)
 
-        costs = self.cas_pam(fea_left[-3:], fea_right[-3:])
+        _, _, cost = self.pam(fea_left[3], fea_right[3], cost=(0, 0))
 
-        att_s1, att_cycle_s1, valid_mask_s1 = output(costs[0])
-        att_s2, att_cycle_s2, valid_mask_s2 = output(costs[1])
-        att_s3, att_cycle_s3, valid_mask_s3 = output(costs[2])
+        att_s2, att_cycle_s2, valid_mask_s2 = output(cost)
 
-        # PAM_stage at 1/2 and 1 scales consumes too much memory
+        # PAM_stage at 1/4, 1/2, and 1 scales consumes too much memory
+        att_s3 = [
+            F.interpolate(att_s2[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
+            F.interpolate(att_s2[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
+        ]
         att_s4 = [
-            F.interpolate(att_s3[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
-            F.interpolate(att_s3[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
+            F.interpolate(att_s2[0].unsqueeze(1), scale_factor=4, mode="trilinear", align_corners=False).squeeze(1),
+            F.interpolate(att_s2[1].unsqueeze(1), scale_factor=4, mode="trilinear", align_corners=False).squeeze(1)
         ]
         att_s5 = [
-            F.interpolate(att_s4[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
-            F.interpolate(att_s4[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
-        ]
-
-        # Maybe, I should add PAM_stage at 1/32 scale too
-        att_s0 = [
-            F.interpolate(att_s1[0].unsqueeze(1), scale_factor=0.5, mode="trilinear", align_corners=False).squeeze(1),
-            F.interpolate(att_s1[1].unsqueeze(1), scale_factor=0.5, mode="trilinear", align_corners=False).squeeze(1)
+            F.interpolate(att_s2[0].unsqueeze(1), scale_factor=8, mode="trilinear", align_corners=False).squeeze(1),
+            F.interpolate(att_s2[1].unsqueeze(1), scale_factor=8, mode="trilinear", align_corners=False).squeeze(1)
         ]
 
         fea_warped_right = [
             torch.matmul(att[0], image.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for image, att in zip(
-                fea_right[:-3],
-                [att_s5, att_s4, att_s3, att_s2, att_s1, att_s0]
+                fea_right[:-1],
+                [att_s5, att_s4, att_s3, att_s2]
             )
         ]
 
         valid_masks = [
-            F.interpolate(valid_mask_s3[0].float(), scale_factor=4, mode="nearest"),
-            F.interpolate(valid_mask_s3[0].float(), scale_factor=2, mode="nearest"),
-            valid_mask_s3[0],
-            valid_mask_s2[0],
-            valid_mask_s1[0],
-            F.interpolate(valid_mask_s1[0].float(), scale_factor=0.5, mode="nearest")
+            F.interpolate(valid_mask_s2[0].float(), scale_factor=8, mode="nearest"),
+            F.interpolate(valid_mask_s2[0].float(), scale_factor=4, mode="nearest"),
+            F.interpolate(valid_mask_s2[0].float(), scale_factor=2, mode="nearest"),
+            valid_mask_s2[0]
         ]
 
-        corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
+        corrected_left = self.transfer(fea_left[:-1], fea_warped_right, valid_masks)
 
         warped_right = torch.matmul(att_s5[0], right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
         return corrected_left, (
-            [att_s1, att_s2, att_s3],
-            [att_cycle_s1, att_cycle_s2, att_cycle_s3],
-            [valid_mask_s1, valid_mask_s2, valid_mask_s3],
+            att_s2,
+            att_cycle_s2,
+            valid_mask_s2,
             warped_right
         )
 
@@ -100,9 +94,9 @@ class SIMP(pl.LightningModule):
 
         corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
 
-        loss_pm = loss_pam_photometric_multiscale(left, right, att, valid_mask)
-        loss_smooth = 0.1 * loss_pam_smoothness_multiscale(att)
-        loss_cycle = loss_pam_cycle_multiscale(att_cycle, valid_mask)
+        loss_pm = loss_pam_photometric(left, right, att, valid_mask)
+        loss_smooth = 0.1 * loss_pam_smoothness(att)
+        loss_cycle = loss_pam_cycle(att_cycle, valid_mask)
 
         loss_cc = F.l1_loss(corrected_left, left_gt) + \
             F.mse_loss(corrected_left, left_gt) + \
