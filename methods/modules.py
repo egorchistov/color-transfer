@@ -46,28 +46,15 @@ class MultiScaleFeatureExtration(nn.Module):
         super().__init__()
 
         self.encoder = nn.Sequential(
-            nn.Sequential(
-                BasicBlock(3, 16),
-                BasicBlock(16, 16),
-            ),
-            nn.Sequential(
-                BasicBlock(16, 32, stride=2),
-                BasicBlock(32, 32),
-            ),
-            nn.Sequential(
-                BasicBlock(32, 64, stride=2),
-                BasicBlock(64, 64)
-            ),
-            nn.Sequential(
-                BasicBlock(64, 96, stride=2),
-                BasicBlock(96, 96)
-            )
+            BasicBlock(3, 16),
+            BasicBlock(16, 32, stride=2),
+            BasicBlock(32, 64, stride=2),
+            BasicBlock(64, 96, stride=2)
         )
 
         self.decoder = nn.Sequential(
             nn.Sequential(
                 Upsample(96, 64),
-                BasicBlock(64, 64),
                 BasicBlock(64, 64),
             )
         )
@@ -246,18 +233,9 @@ class MultiScaleTransfer(nn.Module):
         super().__init__()
 
         self.decoder = nn.Sequential(
-            nn.Sequential(
-                BasicBlock(2 * 64 + 1, 2 * 64 + 1, bn=False),
-                BasicBlock(2 * 64 + 1, 2 * 64 + 1, bn=False),
-            ),
-            nn.Sequential(
-                BasicBlock(2 * 32 + 1, 2 * 32 + 1, bn=False),
-                BasicBlock(2 * 32 + 1, 2 * 32 + 1, bn=False),
-            ),
-            nn.Sequential(
-                BasicBlock(2 * 16 + 1, 2 * 16 + 1, bn=False),
-                BasicBlock(2 * 16 + 1, 2 * 16 + 1, bn=False)
-            )
+            BasicBlock(2 * 64 + 1, 2 * 64 + 1, bn=False),
+            BasicBlock(2 * 32 + 1, 2 * 32 + 1, bn=False),
+            BasicBlock(2 * 16 + 1, 2 * 16 + 1, bn=False)
         )
 
         self.upsample = nn.Sequential(
