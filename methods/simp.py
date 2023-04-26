@@ -33,9 +33,8 @@ from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiSca
 
 
 class SIMP(pl.LightningModule):
-    def __init__(self, learning_rate=1e-4):
+    def __init__(self):
         super().__init__()
-        self.learning_rate = learning_rate
 
         self.extraction = MultiScaleFeatureExtration()
         self.cas_pam = CasPAM()
@@ -137,6 +136,18 @@ class SIMP(pl.LightningModule):
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        self.trainer.reset_train_dataloader()
 
-        return [optimizer]
+        optimizer = torch.optim.AdamW(self.parameters())
+        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+            optimizer,
+            max_lr=1e-4,
+            steps_per_epoch=len(self.trainer.train_dataloader),
+            epochs=self.trainer.max_epochs,
+            pct_start=0.01,
+            final_div_factor=100)
+
+        return {
+            "optimizer": optimizer,
+            "lr_scheduler": {"scheduler": scheduler, "interval": "step"}
+        }

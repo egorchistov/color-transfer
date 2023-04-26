@@ -43,6 +43,7 @@ model = {
 
 wandb_logger = WandbLogger(project="color-transfer", log_model=True)
 checkpoint = pl.callbacks.ModelCheckpoint(monitor="PSNR", mode="max")
+lr_monitor = pl.callbacks.lr_monitor.LearningRateMonitor()
 
-trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint], logger=wandb_logger)
+trainer = pl.Trainer.from_argparse_args(args, callbacks=[checkpoint, lr_monitor], logger=wandb_logger)
 trainer.fit(model, datamodule)

@@ -96,7 +96,7 @@ class CTDataModule(pl.LightningDataModule):
             self.val = CTDataset(self.image_dir / "Validation", val_transforms, distortions, self.use_real_distortions)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers)
+        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, drop_last=True)
 
     def val_dataloader(self):
         return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=self.num_workers)
