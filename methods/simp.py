@@ -53,25 +53,14 @@ class SIMP(pl.LightningModule):
         att_s3, att_cycle_s3, valid_mask_s3 = output(costs[2])
 
         # PAM_stage at 1/2 and 1 scales consumes too much memory
-        att_s4 = [
-            F.interpolate(att_s3[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
-            F.interpolate(att_s3[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
-        ]
-        att_s5 = [
-            F.interpolate(att_s4[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
-            F.interpolate(att_s4[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
-        ]
-
-        # Maybe, I should add PAM_stage at 1/32 scale too
-        att_s0 = [
-            F.interpolate(att_s1[0].unsqueeze(1), scale_factor=0.5, mode="trilinear", align_corners=False).squeeze(1),
-            F.interpolate(att_s1[1].unsqueeze(1), scale_factor=0.5, mode="trilinear", align_corners=False).squeeze(1)
-        ]
+        att_s4_0 = F.interpolate(att_s3[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
+        att_s5_0 = F.interpolate(att_s3[0].unsqueeze(1), scale_factor=4, mode="trilinear", align_corners=False).squeeze(1)
+        att_s0_0 = F.interpolate(att_s1[0].unsqueeze(1), scale_factor=0.5, mode="trilinear", align_corners=False).squeeze(1)
 
         fea_warped_right = [
-            torch.matmul(att[0], image.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for image, att in zip(
+            torch.matmul(att, image.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for image, att in zip(
                 fea_right[:-3],
-                [att_s5, att_s4, att_s3, att_s2, att_s1, att_s0]
+                [att_s5_0, att_s4_0, att_s3[0], att_s2[0], att_s1[0], att_s0_0]
             )
         ]
 
@@ -86,7 +75,7 @@ class SIMP(pl.LightningModule):
 
         corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
 
-        warped_right = torch.matmul(att_s5[0], right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        warped_right = torch.matmul(att_s5_0, right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
         return corrected_left, (
             [att_s1, att_s2, att_s3],
