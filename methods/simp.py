@@ -52,19 +52,41 @@ class SIMP(pl.LightningModule):
         att_s2, att_cycle_s2, valid_mask_s2 = output(costs[1])
         att_s3, att_cycle_s3, valid_mask_s3 = output(costs[2])
 
+        # PAM_stage at 1/2 and 1 scales consumes too much memory
+        att_s4 = [
+            F.interpolate(att_s3[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
+            F.interpolate(att_s3[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
+        ]
+        att_s5 = [
+            F.interpolate(att_s4[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
+            F.interpolate(att_s4[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
+        ]
+
+        # Maybe, I should add PAM_stage at 1/32 scale too
+        att_s0 = [
+            F.interpolate(att_s1[0].unsqueeze(1), scale_factor=0.5, mode="trilinear", align_corners=False).squeeze(1),
+            F.interpolate(att_s1[1].unsqueeze(1), scale_factor=0.5, mode="trilinear", align_corners=False).squeeze(1)
+        ]
+
         fea_warped_right = [
             torch.matmul(att[0], image.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for image, att in zip(
-                [fea_right[2], fea_right[3], fea_right[4]],
-                [att_s3, att_s2, att_s1]
+                fea_right[:-3],
+                [att_s5, att_s4, att_s3, att_s2, att_s1, att_s0]
             )
         ]
 
-        valid_masks = [valid_mask_s3[0], valid_mask_s2[0], valid_mask_s1[0]]
+        valid_masks = [
+            F.interpolate(valid_mask_s3[0].float(), scale_factor=4, mode="nearest"),
+            F.interpolate(valid_mask_s3[0].float(), scale_factor=2, mode="nearest"),
+            valid_mask_s3[0],
+            valid_mask_s2[0],
+            valid_mask_s1[0],
+            F.interpolate(valid_mask_s1[0].float(), scale_factor=0.5, mode="nearest")
+        ]
 
         corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
 
-        att_s5_0 = F.interpolate(att_s3[0].unsqueeze(1), scale_factor=4, mode="trilinear", align_corners=False).squeeze(1)
-        warped_right = torch.matmul(att_s5_0, right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        warped_right = torch.matmul(att_s5[0], right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
         return corrected_left, (
             [att_s1, att_s2, att_s3],

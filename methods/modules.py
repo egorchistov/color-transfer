@@ -332,7 +332,7 @@ class MultiScaleTransfer(nn.Module):
         )
 
         self.upsample = nn.Sequential(
-            Upsample(160, 2 * 128 + 1, bn=False),
+            Upsample(2 * 160 + 1, 2 * 128 + 1, bn=False),
             Upsample(2 * 128 + 1, 2 * 96 + 1, bn=False),
             Upsample(2 * 96 + 1, 2 * 64 + 1, bn=False),
             Upsample(2 * 64 + 1, 2 * 32 + 1, bn=False),
@@ -342,28 +342,15 @@ class MultiScaleTransfer(nn.Module):
         self.bias = nn.Conv2d(2 * 16 + 1, 3, kernel_size=1, padding=0, bias=True)
 
     def forward(self, fea_left, fea_right, valid_masks):
-        """Apply masked softmax to cost volumes and return matching attention
-        maps and valid masks
-
-        Parameters
-        ----------
-        fea_left : list of (B, C, H, W) tensors from scales 1 to 1/32
-        fea_right : list of (B, C, H, W) tensors from scales 1/4 to 1/16
-        valid_masks : list of (B, 1, H, W) tensors from scales 1/4 to 1/16
-
-        Returns
-        -------
-        corrected_left : (B, 3, H, W) tensor
-        """
         features = [
-            torch.cat([left, right, valid_mask], dim=1) for left, right, valid_mask in zip(fea_left[2:5], fea_right, valid_masks)
+            torch.cat([left, right, valid_mask], dim=1) for left, right, valid_mask in zip(fea_left, fea_right, valid_masks)
         ]
 
-        x = fea_left[5]
-        x = self.decoder[0](self.upsample[0](x) + features[2])
-        x = self.decoder[1](self.upsample[1](x) + features[1])
-        x = self.decoder[2](self.upsample[2](x) + features[0])
-        x = self.decoder[3](self.upsample[3](x))
-        x = self.decoder[4](self.upsample[4](x))
+        x = features[5]
+        x = self.decoder[0](self.upsample[0](x) + features[4])
+        x = self.decoder[1](self.upsample[1](x) + features[3])
+        x = self.decoder[2](self.upsample[2](x) + features[2])
+        x = self.decoder[3](self.upsample[3](x) + features[1])
+        x = self.decoder[4](self.upsample[4](x) + features[0])
 
         return self.bias(x)
