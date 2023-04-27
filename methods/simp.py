@@ -139,7 +139,8 @@ class SIMP(pl.LightningModule):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
         scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
-            T_max=self.trainer.estimated_stepping_batches)
+            T_max=self.trainer.estimated_stepping_batches,
+            eta_min=1e-6)
 
         return {
             "optimizer": optimizer,

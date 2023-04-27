@@ -17,7 +17,7 @@ trainer:
       id: null
       anonymous: null
       project: color-transfer
-      log_model: 'True'
+      log_model: true
       experiment: null
       prefix: ''
       checkpoint_name: null
