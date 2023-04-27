@@ -49,10 +49,20 @@ class MultiScaleFeatureExtration(nn.Module):
             BasicBlock(3, 16),
             BasicBlock(16, 32, stride=2),
             BasicBlock(32, 64, stride=2),
-            BasicBlock(64, 96, stride=2)
+            BasicBlock(64, 96, stride=2),
+            BasicBlock(96, 128, stride=2),
+            BasicBlock(128, 160, stride=2)
         )
 
         self.decoder = nn.Sequential(
+            nn.Sequential(
+                Upsample(160, 128),
+                BasicBlock(128, 128),
+            ),
+            nn.Sequential(
+                Upsample(128, 96),
+                BasicBlock(96, 96),
+            ),
             nn.Sequential(
                 Upsample(96, 64),
                 BasicBlock(64, 64),
@@ -140,6 +150,87 @@ class PAM(nn.Module):
             fea_left, fea_right, cost = block(fea_left, fea_right, cost)
 
         return fea_left, fea_right, cost
+
+
+class CasPAM(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+        self.stages = nn.Sequential(
+            PAM(128),
+            PAM(96),
+            PAM(64)
+        )
+
+        # bottleneck in stage 2
+        self.b2 = nn.Sequential(
+            nn.Conv2d(128 + 96, 96, kernel_size=1, padding=0, bias=True),
+            nn.LeakyReLU(inplace=True)
+        )
+
+        # bottleneck in stage 3
+        self.b3 = nn.Sequential(
+            nn.Conv2d(96 + 64, 64, kernel_size=1, padding=0, bias=True),
+            nn.LeakyReLU(inplace=True)
+        )
+
+    def forward(self, fea_left, fea_right):
+        """Apply three parallax attention stages at 1/16, 1/8, 1/4 scales
+
+        Parameters
+        ----------
+        fea_left : feature list of scales 1/16, 1/8, 1/4
+            fea_left_s1, fea_left_s2, fea_left_s3
+        fea_right : feature list of scales 1/16, 1/8, 1/4
+            fea_right_s1, fea_right_s2, fea_right_s3
+
+        Returns
+        -------
+        costs : cost list of scales 1/16, 1/8, 1/4
+            cost_s1, cost_s2, cost_s3
+        """
+
+        fea_left_s1, fea_left_s2, fea_left_s3 = fea_left
+        fea_right_s1, fea_right_s2, fea_right_s3 = fea_right
+
+        b, _, h_s1, w_s1 = fea_left_s1.shape
+        b, _, h_s2, w_s2 = fea_left_s2.shape
+
+        # stage 1: 1/16
+        cost_s0 = [
+            torch.zeros(b, h_s1, w_s1, w_s1).to(fea_right_s1.device),
+            torch.zeros(b, h_s1, w_s1, w_s1).to(fea_right_s1.device)
+        ]
+
+        fea_left, fea_right, cost_s1 = self.stages[0](fea_left_s1, fea_right_s1, cost_s0)
+
+        # stage 2: 1/8
+        fea_left = F.interpolate(fea_left, scale_factor=2, mode="bilinear", align_corners=False)
+        fea_right = F.interpolate(fea_right, scale_factor=2, mode="bilinear", align_corners=False)
+        fea_left = self.b2(torch.cat([fea_left, fea_left_s2], dim=1))
+        fea_right = self.b2(torch.cat([fea_right, fea_right_s2], dim=1))
+
+        cost_s1_up = [
+            F.interpolate(cost_s1[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
+            F.interpolate(cost_s1[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
+        ]
+
+        fea_left, fea_right, cost_s2 = self.stages[1](fea_left, fea_right, cost_s1_up)
+
+        # stage 3: 1/4
+        fea_left = F.interpolate(fea_left, scale_factor=2, mode="bilinear", align_corners=False)
+        fea_right = F.interpolate(fea_right, scale_factor=2, mode="bilinear", align_corners=False)
+        fea_left = self.b3(torch.cat([fea_left, fea_left_s3], dim=1))
+        fea_right = self.b3(torch.cat([fea_right, fea_right_s3], dim=1))
+
+        cost_s2_up = [
+            F.interpolate(cost_s2[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
+            F.interpolate(cost_s2[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
+        ]
+
+        fea_left, fea_right, cost_s3 = self.stages[2](fea_left, fea_right, cost_s2_up)
+
+        return [cost_s1, cost_s2, cost_s3]
 
 
 def output(costs):
@@ -233,12 +324,16 @@ class MultiScaleTransfer(nn.Module):
         super().__init__()
 
         self.decoder = nn.Sequential(
+            BasicBlock(2 * 128 + 1, 2 * 128 + 1, bn=False),
+            BasicBlock(2 * 96 + 1, 2 * 96 + 1, bn=False),
             BasicBlock(2 * 64 + 1, 2 * 64 + 1, bn=False),
             BasicBlock(2 * 32 + 1, 2 * 32 + 1, bn=False),
             BasicBlock(2 * 16 + 1, 2 * 16 + 1, bn=False)
         )
 
         self.upsample = nn.Sequential(
+            Upsample(2 * 160 + 1, 2 * 128 + 1, bn=False),
+            Upsample(2 * 128 + 1, 2 * 96 + 1, bn=False),
             Upsample(2 * 96 + 1, 2 * 64 + 1, bn=False),
             Upsample(2 * 64 + 1, 2 * 32 + 1, bn=False),
             Upsample(2 * 32 + 1, 2 * 16 + 1, bn=False)
@@ -251,9 +346,11 @@ class MultiScaleTransfer(nn.Module):
             torch.cat([left, right, valid_mask], dim=1) for left, right, valid_mask in zip(fea_left, fea_right, valid_masks)
         ]
 
-        x = features[3]
-        x = self.decoder[0](self.upsample[0](x) + features[2])
-        x = self.decoder[1](self.upsample[1](x) + features[1])
-        x = self.decoder[2](self.upsample[2](x) + features[0])
+        x = features[5]
+        x = self.decoder[0](self.upsample[0](x) + features[4])
+        x = self.decoder[1](self.upsample[1](x) + features[3])
+        x = self.decoder[2](self.upsample[2](x) + features[2])
+        x = self.decoder[3](self.upsample[3](x) + features[1])
+        x = self.decoder[4](self.upsample[4](x) + features[0])
 
         return self.bias(x)
