@@ -130,16 +130,10 @@ class SIMP(pl.LightningModule):
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
 
     def configure_optimizers(self):
-        self.trainer.reset_train_dataloader()
-
-        optimizer = torch.optim.AdamW(self.parameters())
-        scheduler = torch.optim.lr_scheduler.OneCycleLR(
+        optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
             optimizer,
-            max_lr=1e-4,
-            steps_per_epoch=len(self.trainer.train_dataloader),
-            epochs=self.trainer.max_epochs,
-            pct_start=0.01,
-            final_div_factor=100)
+            T_max=self.trainer.estimated_stepping_batches)
 
         return {
             "optimizer": optimizer,

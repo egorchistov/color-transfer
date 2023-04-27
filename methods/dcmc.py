@@ -30,9 +30,8 @@ from methods.modules import FeatureExtration, PAB, output, Transfer
 
 
 class DCMC(pl.LightningModule):
-    def __init__(self, learning_rate=1e-4):
+    def __init__(self):
         super().__init__()
-        self.learning_rate = learning_rate
 
         self.extraction = FeatureExtration()
         self.pam = PAB(channels=64, weighted_shortcut=False)
@@ -103,6 +102,6 @@ class DCMC(pl.LightningModule):
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
 
         return [optimizer]

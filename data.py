@@ -62,12 +62,13 @@ class CTDataset(Dataset):
 
 
 class CTDataModule(pl.LightningDataModule):
-    def __init__(self, image_dir, batch_size, patch_size, num_workers, use_real_distortions):
+    def __init__(self, image_dir: Path, batch_size: int, img_height, img_width, num_workers: int, use_real_distortions: bool):
         super().__init__()
 
         self.image_dir = image_dir
         self.batch_size = batch_size
-        self.patch_size = patch_size
+        self.img_height = img_height
+        self.img_width = img_width
         self.num_workers = num_workers
         self.use_real_distortions = use_real_distortions
 
@@ -78,8 +79,8 @@ class CTDataModule(pl.LightningDataModule):
     def setup(self, stage=None):
         if stage == "fit" or stage is None:
             train_transforms = A.Compose([
-                A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
-                A.RandomCrop(self.patch_size[0], self.patch_size[1]),
+                A.PadIfNeeded(self.img_height, self.img_width),
+                A.RandomCrop(self.img_height, self.img_width),
                 A.ToFloat(),
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
@@ -87,8 +88,8 @@ class CTDataModule(pl.LightningDataModule):
             self.train = CTDataset(self.image_dir / "Train", train_transforms, distortions, self.use_real_distortions)
 
             val_transforms = A.Compose([
-                A.PadIfNeeded(self.patch_size[0], self.patch_size[1]),
-                A.CenterCrop(self.patch_size[0], self.patch_size[1]),
+                A.PadIfNeeded(self.img_height, self.img_width),
+                A.CenterCrop(self.img_height, self.img_width),
                 A.ToFloat(),
                 ToTensorV2()
             ], additional_targets={"left_gt": "image", "right": "image"})
@@ -96,10 +97,20 @@ class CTDataModule(pl.LightningDataModule):
             self.val = CTDataset(self.image_dir / "Validation", val_transforms, distortions, self.use_real_distortions)
 
     def train_dataloader(self):
-        return torch.utils.data.DataLoader(self.train, batch_size=self.batch_size, shuffle=True, num_workers=self.num_workers, drop_last=True)
+        return torch.utils.data.DataLoader(
+            self.train,
+            batch_size=self.batch_size,
+            shuffle=True,
+            num_workers=self.num_workers,
+            drop_last=True)
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(self.val, batch_size=self.batch_size, num_workers=self.num_workers)
+        return torch.utils.data.DataLoader(
+            self.val,
+            batch_size=self.batch_size,
+            shuffle=False,
+            num_workers=self.num_workers,
+            drop_last=False)
 
     def plot_example(self):
         idx = np.random.choice(len(self.train))
@@ -116,7 +127,7 @@ class CTDataModule(pl.LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = CTDataModule(Path("Artificial Dataset"), batch_size=1, patch_size=(256, 512), num_workers=0,
+    datamodule = CTDataModule(Path("Artificial Dataset"), batch_size=1, img_height=256, img_width=512, num_workers=0,
                               use_real_distortions=False)
     datamodule.setup()
     datamodule.plot_example()

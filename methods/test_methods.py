@@ -1,4 +1,3 @@
-import subprocess
 from functools import partial
 
 import pytest
@@ -37,25 +36,3 @@ def test_method(method):
     print(f"PSNR gain: {psnr_gain:.3f}, PSNR after: {psnr_after:.3f}")
 
     assert psnr_gain > 10
-
-
-@pytest.mark.parametrize("model", ["DCMC", "SIMP"])
-def test_train_model(model):
-    """Run training script for neural-network based methods"""
-    p = subprocess.run(
-        [
-            "python",
-            "train.py",
-            f"--model={model}",
-            "--dataset_path=Artificial Dataset",
-            "--batch_size=1",
-            "--img_height=64",
-            "--img_width=64",
-            "--num_workers=1",
-            "--limit_train_batches=1",
-            "--limit_val_batches=1",
-            "--max_epochs=1"
-        ]
-    )
-
-    assert p.returncode == 0

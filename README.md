@@ -32,7 +32,7 @@ This repo contains **two datasets** and **six** color-mismatch correction **meth
 
 ## Installation
 
-Our code is developed based on pytorch 1.12, pytorch-lightning 1.7, and python 3.10. Other versions should also work well. Clone this repo and install dependencies:
+Our code is developed based on pytorch 2.0, pytorch-lightning 2.0, and python 3.10. Other versions should also work well. Clone this repo and install dependencies:
 
 ```shell
 git clone https://github.com/egorchistov/color-transfer.git
@@ -59,15 +59,7 @@ We created the following datasets to train and evaluate available models:
 Use this command to start training:
 
 ```shell
-python train.py \
-  --model=SIMP  \  # or DCMC
-  --dataset_path="Artificial Dataset" \
-  --batch_size=16   \
-  --img_height=256  \
-  --img_width=512   \
-  --num_workers=16  \
-  --accelerator=gpu \
-  --max_epochs=100
+python trainer.py fit --config configs/simp.py
 ```
 
 Refer to [WandB](http://wandb.ai/egorchistov/color-transfer) for training history of available models.
