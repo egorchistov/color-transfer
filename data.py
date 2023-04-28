@@ -11,7 +11,7 @@ from pytorch_lightning import LightningDataModule
 
 
 class Dataset(data.Dataset):
-    def __init__(self, image_dir: Path, crop_size):
+    def __init__(self, image_dir, crop_size):
         self.crop_size = crop_size
         self.lefts = sorted(image_dir.glob("*_L.png"))
         self.rights = sorted(image_dir.glob("*_R.png"))
@@ -41,7 +41,7 @@ class Dataset(data.Dataset):
 
 
 class DataModule(LightningDataModule):
-    def __init__(self, image_dir: Path, img_width: int, img_height: int, batch_size: int, num_workers: int):
+    def __init__(self, image_dir: Path, img_width: int, img_height: int, batch_size: int, num_workers: int = 0):
         super().__init__()
 
         self.image_dir = image_dir
@@ -80,5 +80,5 @@ class DataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = DataModule(Path("Artificial Dataset"), batch_size=16, img_width=512, img_height=256, num_workers=0)
+    datamodule = DataModule(Path("Artificial Dataset"), batch_size=16, img_width=512, img_height=256)
     datamodule.plot_example()
