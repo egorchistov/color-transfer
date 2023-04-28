@@ -11,11 +11,11 @@ from pytorch_lightning import LightningDataModule
 
 
 class Dataset(data.Dataset):
-    def __init__(self, image_dir, crop_size):
+    def __init__(self, image_dir, crop_size, magnitude):
         self.crop_size = crop_size
         self.lefts = sorted(image_dir.glob("*_L.png"))
         self.rights = sorted(image_dir.glob("*_R.png"))
-        self.distortions = ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5)
+        self.distortions = ColorJitter(brightness=magnitude, contrast=magnitude, saturation=magnitude, hue=magnitude)
 
         assert len(self.lefts) == len(self.rights)
 
@@ -41,17 +41,19 @@ class Dataset(data.Dataset):
 
 
 class DataModule(LightningDataModule):
-    def __init__(self, image_dir: Path, img_width: int, img_height: int, batch_size: int, num_workers: int = 0):
+    def __init__(self, image_dir: Path, img_width: int, img_height: int, magnitude: float, batch_size: int,
+                 num_workers: int = 0):
         super().__init__()
 
         self.image_dir = image_dir
         self.crop_size = (img_height, img_width)
+        self.magnitude = magnitude
         self.batch_size = batch_size
         self.num_workers = num_workers
 
     def train_dataloader(self):
         return data.DataLoader(
-            Dataset(self.image_dir / "Train", self.crop_size),
+            Dataset(self.image_dir / "Train", self.crop_size, self.magnitude),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
@@ -60,7 +62,7 @@ class DataModule(LightningDataModule):
 
     def val_dataloader(self):
         return data.DataLoader(
-            Dataset(self.image_dir / "Validation", self.crop_size),
+            Dataset(self.image_dir / "Validation", self.crop_size, self.magnitude),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
             pin_memory=True,
@@ -80,5 +82,5 @@ class DataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = DataModule(Path("Artificial Dataset"), batch_size=16, img_width=512, img_height=256)
+    datamodule = DataModule(Path("Artificial Dataset"), img_width=512, img_height=256, magnitude=0.2, batch_size=16)
     datamodule.plot_example()
