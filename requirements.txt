@@ -2,7 +2,6 @@ opencv-python
 scikit-image
 tqdm
 matplotlib
-albumentations
 numpy
 scipy
 torch

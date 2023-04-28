@@ -77,11 +77,10 @@ ckpt_path: null
 model:
   class_path: methods.simp.SIMP
 data:
-  class_path: data.CTDataModule
+  class_path: data.DataModule
   init_args:
     image_dir: Artificial Dataset
-    batch_size: 8
-    img_height: 128
     img_width: 256
+    img_height: 128
+    batch_size: 8
     num_workers: 16
-    use_real_distortions: false
