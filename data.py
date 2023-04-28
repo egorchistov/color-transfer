@@ -26,8 +26,8 @@ class Dataset(data.Dataset):
         right = Image.open(self.rights[index]).convert("RGB")
         left_gt = Image.open(self.lefts[index]).convert("RGB")
 
-        padding = [max(0, self.crop_size[0] - right.size[0]),
-                   max(0, self.crop_size[1] - right.size[1])]
+        padding = [max(0, self.crop_size[0] - right.size[1]),
+                   max(0, self.crop_size[1] - right.size[0])]
 
         right = pad(to_tensor(right), padding)
         left_gt = pad(to_tensor(left_gt), padding)
@@ -45,7 +45,7 @@ class DataModule(LightningDataModule):
         super().__init__()
 
         self.image_dir = image_dir
-        self.crop_size = (img_width, img_height)
+        self.crop_size = (img_height, img_width)
         self.batch_size = batch_size
         self.num_workers = num_workers
 
