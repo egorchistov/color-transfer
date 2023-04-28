@@ -26,8 +26,8 @@ class Dataset(data.Dataset):
         right = Image.open(self.rights[index]).convert("RGB")
         left_gt = Image.open(self.lefts[index]).convert("RGB")
 
-        padding = [max(0, self.crop_size[0] - right.size[1]),
-                   max(0, self.crop_size[1] - right.size[0])]
+        padding = [max(0, self.crop_size[1] - right.size[0]),
+                   max(0, self.crop_size[0] - right.size[1])]
 
         right = pad(to_tensor(right), padding)
         left_gt = pad(to_tensor(left_gt), padding)
