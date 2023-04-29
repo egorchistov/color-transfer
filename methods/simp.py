@@ -33,8 +33,10 @@ from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiSca
 
 
 class SIMP(pl.LightningModule):
-    def __init__(self):
+    def __init__(self, num_logged_images: int = 4):
         super().__init__()
+
+        self.num_logged_images = num_logged_images
 
         self.extraction = MultiScaleFeatureExtration()
         self.cas_pam = CasPAM()
@@ -121,7 +123,8 @@ class SIMP(pl.LightningModule):
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
                 key="Validation",
-                images=[left, warped_right, corrected_left.clamp(0, 1), left_gt, right],
+                images=[batch[:self.num_logged_images]
+                        for batch in [left, warped_right, corrected_left.clamp(0, 1), left_gt, right]],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
 
     def configure_optimizers(self):

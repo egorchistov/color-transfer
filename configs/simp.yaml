@@ -76,6 +76,8 @@ trainer:
 ckpt_path: null
 model:
   class_path: methods.simp.SIMP
+  init_args:
+    num_logged_images: 4
 data:
   class_path: data.DataModule
   init_args:
