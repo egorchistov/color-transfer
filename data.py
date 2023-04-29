@@ -82,5 +82,5 @@ class DataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = DataModule(Path("Artificial Dataset"), img_width=512, img_height=256, magnitude=0.2, batch_size=16)
+    datamodule = DataModule(Path("Artificial Dataset"), img_width=512, img_height=256, magnitude=0.3, batch_size=16)
     datamodule.plot_example()
