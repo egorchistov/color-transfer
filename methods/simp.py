@@ -9,7 +9,7 @@ cascaded parallax attention, and transfer.
 
 For each scale we kept the channel count unchanged, as this table shows:
 ## scale     #  1  #  1/2  #  1/4  #  1/8  #  1/16  #  1/32  ##
-## channels  #  16 #  32   #  64   #  96   #  128   #  160   ##
+## channels  #  16 #  32   #  64   #  128   #  256   #  512   ##
 
 Citation
 --------

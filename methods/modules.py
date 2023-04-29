@@ -49,22 +49,22 @@ class MultiScaleFeatureExtration(nn.Module):
             BasicBlock(3, 16),
             BasicBlock(16, 32, stride=2),
             BasicBlock(32, 64, stride=2),
-            BasicBlock(64, 96, stride=2),
-            BasicBlock(96, 128, stride=2),
-            BasicBlock(128, 160, stride=2)
+            BasicBlock(64, 128, stride=2),
+            BasicBlock(128, 256, stride=2),
+            BasicBlock(256, 512, stride=2)
         )
 
         self.decoder = nn.Sequential(
             nn.Sequential(
-                Upsample(160, 128),
+                Upsample(512, 256),
+                BasicBlock(256, 256),
+            ),
+            nn.Sequential(
+                Upsample(256, 128),
                 BasicBlock(128, 128),
             ),
             nn.Sequential(
-                Upsample(128, 96),
-                BasicBlock(96, 96),
-            ),
-            nn.Sequential(
-                Upsample(96, 64),
+                Upsample(128, 64),
                 BasicBlock(64, 64),
             )
         )
@@ -157,20 +157,20 @@ class CasPAM(nn.Module):
         super().__init__()
 
         self.stages = nn.Sequential(
+            PAM(256),
             PAM(128),
-            PAM(96),
             PAM(64)
         )
 
         # bottleneck in stage 2
         self.b2 = nn.Sequential(
-            nn.Conv2d(128 + 96, 96, kernel_size=1, padding=0, bias=True),
+            nn.Conv2d(256 + 128, 128, kernel_size=1, padding=0, bias=True),
             nn.LeakyReLU(inplace=True)
         )
 
         # bottleneck in stage 3
         self.b3 = nn.Sequential(
-            nn.Conv2d(96 + 64, 64, kernel_size=1, padding=0, bias=True),
+            nn.Conv2d(128 + 64, 64, kernel_size=1, padding=0, bias=True),
             nn.LeakyReLU(inplace=True)
         )
 
@@ -324,17 +324,17 @@ class MultiScaleTransfer(nn.Module):
         super().__init__()
 
         self.decoder = nn.Sequential(
+            BasicBlock(2 * 256 + 1, 2 * 256 + 1, bn=False),
             BasicBlock(2 * 128 + 1, 2 * 128 + 1, bn=False),
-            BasicBlock(2 * 96 + 1, 2 * 96 + 1, bn=False),
             BasicBlock(2 * 64 + 1, 2 * 64 + 1, bn=False),
             BasicBlock(2 * 32 + 1, 2 * 32 + 1, bn=False),
             BasicBlock(2 * 16 + 1, 2 * 16 + 1, bn=False)
         )
 
         self.upsample = nn.Sequential(
-            Upsample(2 * 160 + 1, 2 * 128 + 1, bn=False),
-            Upsample(2 * 128 + 1, 2 * 96 + 1, bn=False),
-            Upsample(2 * 96 + 1, 2 * 64 + 1, bn=False),
+            Upsample(2 * 512 + 1, 2 * 256 + 1, bn=False),
+            Upsample(2 * 256 + 1, 2 * 128 + 1, bn=False),
+            Upsample(2 * 128 + 1, 2 * 64 + 1, bn=False),
             Upsample(2 * 64 + 1, 2 * 32 + 1, bn=False),
             Upsample(2 * 32 + 1, 2 * 16 + 1, bn=False)
         )
