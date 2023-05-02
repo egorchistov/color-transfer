@@ -55,20 +55,10 @@ class MultiScaleFeatureExtration(nn.Module):
 
             self.encoder.append(block)
 
-        self.decoder = nn.Sequential()
-
-        for scale in (4, 3, 2):
-            block = nn.Sequential(Upsample(channels[scale + 1], channels[scale]))
-
-            for layer in range(1, layers[scale - 2]):
-                block.append(BasicBlock(channels[scale], channels[scale]))
-
-            self.decoder.append(block)
-
     def forward(self, x):
         features = []
 
-        for block in self.encoder + self.decoder:
+        for block in self.encoder:
             x = block(x)
             features.append(x)
 
