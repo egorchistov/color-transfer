@@ -33,14 +33,22 @@ from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiSca
 
 
 class SIMP(pl.LightningModule):
-    def __init__(self, num_logged_images: int = 4):
+    def __init__(self,
+                 layers: tuple[int, ...] = (2, 2, 2, 2),
+                 pam_layers: tuple[int, ...] = (4, 4, 4),
+                 channels: tuple[int, ...] = (16, 32, 64, 128, 256, 512),
+                 num_logged_images: int = 3):
         super().__init__()
+
+        assert len(layers) == 4
+        assert len(pam_layers) == 3
+        assert len(channels) == 6
 
         self.num_logged_images = num_logged_images
 
-        self.extraction = MultiScaleFeatureExtration()
-        self.cas_pam = CasPAM()
-        self.transfer = MultiScaleTransfer()
+        self.extraction = MultiScaleFeatureExtration(layers, channels)
+        self.cas_pam = CasPAM(pam_layers, channels[2:5])
+        self.transfer = MultiScaleTransfer(channels)
 
     def forward(self, left, right):
         b, _, h, w = left.shape

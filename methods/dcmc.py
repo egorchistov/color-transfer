@@ -35,10 +35,10 @@ class DCMC(pl.LightningModule):
 
         self.num_logged_images = num_logged_images
 
-        self.extraction = FeatureExtration()
+        self.extraction = FeatureExtration(layers=18, channels=64)
         self.pam = PAB(channels=64, weighted_shortcut=False)
         self.value = torch.nn.Conv2d(64, 64, kernel_size=1)
-        self.transfer = Transfer()
+        self.transfer = Transfer(layers=6, channels=64)
 
     def forward(self, left, right):
         fea_left = self.extraction(left)

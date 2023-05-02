@@ -27,64 +27,56 @@ class BasicBlock(nn.Module):
 
 
 class FeatureExtration(nn.Module):
-    def __init__(self):
+    def __init__(self, layers: int, channels: int):
         super().__init__()
 
-        body = [nn.Conv2d(3, 64, kernel_size=3, padding=1)]
-        for i in range(18):
-            body.append(
-                BasicBlock(64, 64, bn=False, weighted_shortcut=False)
-            )
-        self.body = nn.Sequential(*body)
+        body = nn.Sequential(nn.Conv2d(3, channels, kernel_size=3, padding=1))
+        for _ in range(layers):
+            body.append(BasicBlock(channels, channels, bn=False, weighted_shortcut=False))
 
     def forward(self, x):
         return self.body(x)
 
 
 class MultiScaleFeatureExtration(nn.Module):
-    def __init__(self):
+    def __init__(self, layers: tuple[int], channels: tuple[int]):
         super().__init__()
 
         self.encoder = nn.Sequential(
-            BasicBlock(3, 16),
-            BasicBlock(16, 32, stride=2),
-            nn.Sequential(BasicBlock(32, 64, stride=2), BasicBlock(64, 64)),
-            nn.Sequential(BasicBlock(64, 128, stride=2), BasicBlock(128, 128)),
-            nn.Sequential(BasicBlock(128, 256, stride=2), BasicBlock(256, 256)),
-            nn.Sequential(BasicBlock(256, 512, stride=2), BasicBlock(512, 512))
+            BasicBlock(3, channels[0]),
+            BasicBlock(channels[0], channels[1], stride=2)
         )
 
-        self.decoder = nn.Sequential(
-            nn.Sequential(
-                Upsample(512, 256),
-                BasicBlock(256, 256),
-            ),
-            nn.Sequential(
-                Upsample(256, 128),
-                BasicBlock(128, 128),
-            ),
-            nn.Sequential(
-                Upsample(128, 64),
-                BasicBlock(64, 64),
-            )
-        )
+        for scale in (2, 3, 4, 5):
+            block = nn.Sequential(BasicBlock(channels[scale - 1], channels[scale], stride=2))
+
+            for layer in range(1, layers[scale - 2]):
+                block.append(BasicBlock(channels[scale], channels[scale]))
+
+            self.encoder.append(block)
+
+        self.decoder = nn.Sequential()
+
+        for scale in (4, 3, 2):
+            block = nn.Sequential(Upsample(channels[scale + 1], channels[scale]))
+
+            for layer in range(1, layers[scale - 2]):
+                block.append(BasicBlock(channels[scale], channels[scale]))
+
+            self.decoder.append(block)
 
     def forward(self, x):
         features = []
 
-        for layer in self.encoder:
-            x = layer(x)
-            features.append(x)
-
-        for layer in self.decoder:
-            x = layer(x)
+        for block in self.encoder + self.decoder:
+            x = block(x)
             features.append(x)
 
         return features
 
 
 class PAB(nn.Module):
-    def __init__(self, channels, weighted_shortcut=True):
+    def __init__(self, channels: int, weighted_shortcut=True):
         super().__init__()
 
         self.head = BasicBlock(channels, channels, bn=False, weighted_shortcut=weighted_shortcut)
@@ -135,15 +127,12 @@ class PAB(nn.Module):
 
 
 class PAM(nn.Module):
-    def __init__(self, channels):
+    def __init__(self, layers: int, channels: int):
         super().__init__()
 
-        self.blocks = nn.Sequential(
-            PAB(channels),
-            PAB(channels),
-            PAB(channels),
-            PAB(channels)
-        )
+        self.blocks = nn.Sequential()
+        for _ in range(layers):
+            self.blocks.append(PAB(channels))
 
     def forward(self, fea_left, fea_right, cost):
         for block in self.blocks:
@@ -153,24 +142,24 @@ class PAM(nn.Module):
 
 
 class CasPAM(nn.Module):
-    def __init__(self):
+    def __init__(self, layers: tuple[int], channels: tuple[int]):
         super().__init__()
 
         self.stages = nn.Sequential(
-            PAM(256),
-            PAM(128),
-            PAM(64)
+            PAM(layers[-1], channels[-1]),
+            PAM(layers[-2], channels[-2]),
+            PAM(layers[-3], channels[-3])
         )
 
         # bottleneck in stage 2
         self.b2 = nn.Sequential(
-            nn.Conv2d(256 + 128, 128, kernel_size=1, padding=0, bias=True),
+            nn.Conv2d(channels[-1] + channels[-2], channels[-2], kernel_size=1, padding=0, bias=True),
             nn.LeakyReLU(inplace=True)
         )
 
         # bottleneck in stage 3
         self.b3 = nn.Sequential(
-            nn.Conv2d(128 + 64, 64, kernel_size=1, padding=0, bias=True),
+            nn.Conv2d(channels[-2] + channels[-3], channels[-3], kernel_size=1, padding=0, bias=True),
             nn.LeakyReLU(inplace=True)
         )
 
@@ -298,20 +287,18 @@ class Upsample(torch.nn.Module):
 
 
 class Transfer(nn.Module):
-    def __init__(self):
+    def __init__(self, layers: int, channels: int):
         super().__init__()
 
-        self.body = nn.Sequential(
-            nn.Conv2d(64 + 64 + 1, 64, kernel_size=1),
-            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
-            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
-            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
-            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
-            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
-            BasicBlock(64, 64, bn=False, weighted_shortcut=False),
-            nn.Conv2d(64, 32, kernel_size=3, padding=1),
-            nn.Conv2d(32, 3, kernel_size=3, padding=1)
-        )
+        self.body = nn.Sequential(nn.Conv2d(2 * channels + 1, channels, kernel_size=1))
+
+        for _ in range(layers):
+            self.body.append(BasicBlock(channels, channels, bn=False, weighted_shortcut=False))
+
+        self.body.extend([
+            nn.Conv2d(channels, channels // 2, kernel_size=3, padding=1),
+            nn.Conv2d(channels // 2, 3, kernel_size=3, padding=1)
+        ])
 
     def forward(self, fea_left, fea_right, valid_mask):
         features = torch.cat([fea_left, fea_right, valid_mask[0]], dim=1)
@@ -320,26 +307,26 @@ class Transfer(nn.Module):
 
 
 class MultiScaleTransfer(nn.Module):
-    def __init__(self):
+    def __init__(self, channels: tuple[int]):
         super().__init__()
 
         self.decoder = nn.Sequential(
-            BasicBlock(2 * 256 + 1, 2 * 256 + 1, bn=False),
-            BasicBlock(2 * 128 + 1, 2 * 128 + 1, bn=False),
-            BasicBlock(2 * 64 + 1, 2 * 64 + 1, bn=False),
-            BasicBlock(2 * 32 + 1, 2 * 32 + 1, bn=False),
-            BasicBlock(2 * 16 + 1, 2 * 16 + 1, bn=False)
+            BasicBlock(2 * channels[4] + 1, 2 * channels[4] + 1, bn=False),
+            BasicBlock(2 * channels[3] + 1, 2 * channels[3] + 1, bn=False),
+            BasicBlock(2 * channels[2] + 1, 2 * channels[2] + 1, bn=False),
+            BasicBlock(2 * channels[1] + 1, 2 * channels[1] + 1, bn=False),
+            BasicBlock(2 * channels[0] + 1, 2 * channels[0] + 1, bn=False)
         )
 
         self.upsample = nn.Sequential(
-            Upsample(2 * 512 + 1, 2 * 256 + 1, bn=False),
-            Upsample(2 * 256 + 1, 2 * 128 + 1, bn=False),
-            Upsample(2 * 128 + 1, 2 * 64 + 1, bn=False),
-            Upsample(2 * 64 + 1, 2 * 32 + 1, bn=False),
-            Upsample(2 * 32 + 1, 2 * 16 + 1, bn=False)
+            Upsample(2 * channels[5] + 1, 2 * channels[4] + 1, bn=False),
+            Upsample(2 * channels[4] + 1, 2 * channels[3] + 1, bn=False),
+            Upsample(2 * channels[3] + 1, 2 * channels[2] + 1, bn=False),
+            Upsample(2 * channels[2] + 1, 2 * channels[1] + 1, bn=False),
+            Upsample(2 * channels[1] + 1, 2 * channels[0] + 1, bn=False)
         )
 
-        self.bias = nn.Conv2d(2 * 16 + 1, 3, kernel_size=1, padding=0, bias=True)
+        self.bias = nn.Conv2d(2 * channels[0] + 1, 3, kernel_size=1, padding=0, bias=True)
 
     def forward(self, fea_left, fea_right, valid_masks):
         features = [
