@@ -82,8 +82,7 @@ data:
   class_path: data.DataModule
   init_args:
     image_dir: Artificial Dataset
-    img_width: 256
-    img_height: 128
+    crop_size: [128, 256]
     magnitude: 0.3
     batch_size: 8
     num_workers: 16
