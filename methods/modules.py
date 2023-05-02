@@ -279,7 +279,10 @@ class Upsample(torch.nn.Module):
         self.upsample = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
-            nn.LeakyReLU(inplace=True)
+            nn.LeakyReLU(inplace=True),
+            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=not bn),
+            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
+            nn.LeakyReLU(inplace=True),
         )
 
     def forward(self, x):
