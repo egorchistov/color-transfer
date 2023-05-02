@@ -48,10 +48,10 @@ class MultiScaleFeatureExtration(nn.Module):
         self.encoder = nn.Sequential(
             BasicBlock(3, 16),
             BasicBlock(16, 32, stride=2),
-            nn.Sequential(BasicBlock(32, 64, stride=2), BasicBlock(64, 64, weighted_shortcut=False)),
-            nn.Sequential(BasicBlock(64, 128, stride=2), BasicBlock(128, 128, weighted_shortcut=False)),
-            nn.Sequential(BasicBlock(128, 256, stride=2), BasicBlock(256, 256, weighted_shortcut=False)),
-            nn.Sequential(BasicBlock(256, 512, stride=2), BasicBlock(512, 512, weighted_shortcut=False))
+            nn.Sequential(BasicBlock(32, 64, stride=2), BasicBlock(64, 64)),
+            nn.Sequential(BasicBlock(64, 128, stride=2), BasicBlock(128, 128)),
+            nn.Sequential(BasicBlock(128, 256, stride=2), BasicBlock(256, 256)),
+            nn.Sequential(BasicBlock(256, 512, stride=2), BasicBlock(512, 512))
         )
 
         self.decoder = nn.Sequential(
