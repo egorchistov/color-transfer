@@ -39,7 +39,7 @@ class FeatureExtration(nn.Module):
 
 
 class MultiScaleFeatureExtration(nn.Module):
-    def __init__(self, layers: tuple[int], channels: tuple[int]):
+    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
         super().__init__()
 
         self.encoder = nn.Sequential(
@@ -142,84 +142,56 @@ class PAM(nn.Module):
 
 
 class CasPAM(nn.Module):
-    def __init__(self, layers: tuple[int], channels: tuple[int]):
+    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
         super().__init__()
 
-        self.stages = nn.Sequential(
-            PAM(layers[-1], channels[-1]),
-            PAM(layers[-2], channels[-2]),
-            PAM(layers[-3], channels[-3])
-        )
+        self.stages = nn.Sequential()
+        for stage in range(len(layers)):
+            self.stages.append(PAM(layers[-1 - stage], channels[-1 - stage]))
 
-        # bottleneck in stage 2
-        self.b2 = nn.Sequential(
-            nn.Conv2d(channels[-1] + channels[-2], channels[-2], kernel_size=1, padding=0, bias=True),
-            nn.LeakyReLU(inplace=True)
-        )
+        self.bottlenecks = nn.Sequential()
+        for stage in range(len(layers) - 1):
+            self.bottlenecks.append(nn.Sequential(
+                nn.Conv2d(channels[-1 - stage] + channels[-2 - stage],
+                          channels[-2 - stage],
+                          kernel_size=1,
+                          padding=0,
+                          bias=True),
+                nn.LeakyReLU(inplace=True)))
 
-        # bottleneck in stage 3
-        self.b3 = nn.Sequential(
-            nn.Conv2d(channels[-2] + channels[-3], channels[-3], kernel_size=1, padding=0, bias=True),
-            nn.LeakyReLU(inplace=True)
-        )
-
-    def forward(self, fea_left, fea_right):
-        """Apply three parallax attention stages at 1/16, 1/8, 1/4 scales
+    def forward(self, fea_lefts, fea_rights):
+        """Apply parallax attention stages from lesser scale to greater scale
 
         Parameters
         ----------
-        fea_left : feature list of scales 1/16, 1/8, 1/4
-            fea_left_s1, fea_left_s2, fea_left_s3
-        fea_right : feature list of scales 1/16, 1/8, 1/4
-            fea_right_s1, fea_right_s2, fea_right_s3
+        fea_lefts : feature list of - for example - scales 1/16, 1/8, 1/4
+        fea_rights : feature list of - for example - scales 1/16, 1/8, 1/4
 
         Returns
         -------
-        costs : cost list of scales 1/16, 1/8, 1/4
-            cost_s1, cost_s2, cost_s3
+        costs : cost list of - for example - scales 1/16, 1/8, 1/4
         """
 
-        fea_left_s1, fea_left_s2, fea_left_s3 = fea_left
-        fea_right_s1, fea_right_s2, fea_right_s3 = fea_right
+        costs = []
 
-        b, _, h_s1, w_s1 = fea_left_s1.shape
-        b, _, h_s2, w_s2 = fea_left_s2.shape
+        fea_left, fea_right, cost = self.stages[0](fea_lefts[0], fea_rights[0], cost=(0, 0))
+        costs.append(cost)
 
-        # stage 1: 1/16
-        cost_s0 = [
-            torch.zeros(b, h_s1, w_s1, w_s1).to(fea_right_s1.device),
-            torch.zeros(b, h_s1, w_s1, w_s1).to(fea_right_s1.device)
-        ]
+        for scale in range(1, len(self.stages)):
+            fea_left = F.interpolate(fea_left, scale_factor=2, mode="bilinear", align_corners=False)
+            fea_right = F.interpolate(fea_right, scale_factor=2, mode="bilinear", align_corners=False)
+            fea_left = self.bottlenecks[scale - 1](torch.cat([fea_left, fea_lefts[scale]], dim=1))
+            fea_right = self.bottlenecks[scale - 1](torch.cat([fea_right, fea_rights[scale]], dim=1))
 
-        fea_left, fea_right, cost_s1 = self.stages[0](fea_left_s1, fea_right_s1, cost_s0)
+            cost_up = [
+                F.interpolate(cost[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
+                F.interpolate(cost[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
+            ]
 
-        # stage 2: 1/8
-        fea_left = F.interpolate(fea_left, scale_factor=2, mode="bilinear", align_corners=False)
-        fea_right = F.interpolate(fea_right, scale_factor=2, mode="bilinear", align_corners=False)
-        fea_left = self.b2(torch.cat([fea_left, fea_left_s2], dim=1))
-        fea_right = self.b2(torch.cat([fea_right, fea_right_s2], dim=1))
+            fea_left, fea_right, cost = self.stages[scale](fea_left, fea_right, cost_up)
+            costs.append(cost)
 
-        cost_s1_up = [
-            F.interpolate(cost_s1[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
-            F.interpolate(cost_s1[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
-        ]
-
-        fea_left, fea_right, cost_s2 = self.stages[1](fea_left, fea_right, cost_s1_up)
-
-        # stage 3: 1/4
-        fea_left = F.interpolate(fea_left, scale_factor=2, mode="bilinear", align_corners=False)
-        fea_right = F.interpolate(fea_right, scale_factor=2, mode="bilinear", align_corners=False)
-        fea_left = self.b3(torch.cat([fea_left, fea_left_s3], dim=1))
-        fea_right = self.b3(torch.cat([fea_right, fea_right_s3], dim=1))
-
-        cost_s2_up = [
-            F.interpolate(cost_s2[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
-            F.interpolate(cost_s2[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
-        ]
-
-        fea_left, fea_right, cost_s3 = self.stages[2](fea_left, fea_right, cost_s2_up)
-
-        return [cost_s1, cost_s2, cost_s3]
+        return costs
 
 
 def output(costs):
