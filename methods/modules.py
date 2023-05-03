@@ -287,7 +287,7 @@ class MultiScaleTransfer(nn.Module):
         for scale in (4, 3, 2, 1, 0):
             block = nn.Sequential()
 
-            for layer in range(layers[scale]):
+            for layer in range(layers[scale] - 1):
                 block.append(BasicBlock(2 * channels[scale] + 1, 2 * channels[scale] + 1, bn=False))
 
             self.decoder.append(block)
