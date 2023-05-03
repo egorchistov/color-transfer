@@ -245,26 +245,17 @@ def output(costs):
 
 
 class Upsample(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, weighted_shortcut=True, bn=True):
+    def __init__(self, in_channels, out_channels, bn=True):
         super().__init__()
 
-        self.body = nn.Sequential(
+        self.upsample = nn.Sequential(
             nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1, bias=not bn),
             nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
-            nn.LeakyReLU(inplace=True),
-            nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1, bias=not bn),
-            nn.BatchNorm2d(out_channels) if bn else nn.Identity()
+            nn.LeakyReLU(inplace=True)
         )
 
-        self.shortcut = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=1, stride=2, padding=0, output_padding=1, bias=not bn),
-            nn.BatchNorm2d(out_channels) if bn else nn.Identity()
-        ) if weighted_shortcut or in_channels != out_channels else nn.Identity()
-
-        self.relu = nn.LeakyReLU(inplace=True)
-
     def forward(self, x):
-        return self.relu(self.shortcut(x) + self.body(x))
+        return self.upsample(x)
 
 
 class Transfer(nn.Module):
