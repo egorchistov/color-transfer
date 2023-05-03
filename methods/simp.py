@@ -56,7 +56,7 @@ class SIMP(pl.LightningModule):
         fea_left = self.extraction(left)
         fea_right = self.extraction(right)
 
-        costs = self.cas_pam(fea_left[4:1:-1], fea_right[4:1:-1])
+        costs = self.cas_pam(fea_left[-3:], fea_right[-3:])
 
         att_s1, att_cycle_s1, valid_mask_s1 = output(costs[0])
         att_s2, att_cycle_s2, valid_mask_s2 = output(costs[1])
@@ -69,7 +69,7 @@ class SIMP(pl.LightningModule):
 
         fea_warped_right = [
             torch.matmul(att, image.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for image, att in zip(
-                fea_right,
+                fea_right[:-3],
                 [att_s5_0, att_s4_0, att_s3[0], att_s2[0], att_s1[0], att_s0_0]
             )
         ]
@@ -83,7 +83,7 @@ class SIMP(pl.LightningModule):
             F.interpolate(valid_mask_s1[0].float(), scale_factor=0.5, mode="nearest")
         ]
 
-        corrected_left = self.transfer(fea_left, fea_warped_right, valid_masks)
+        corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
 
         warped_right = torch.matmul(att_s5_0, right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
