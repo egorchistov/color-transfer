@@ -279,16 +279,18 @@ class Transfer(nn.Module):
 
 
 class MultiScaleTransfer(nn.Module):
-    def __init__(self, channels: tuple[int]):
+    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
         super().__init__()
 
-        self.decoder = nn.Sequential(
-            BasicBlock(2 * channels[4] + 1, 2 * channels[4] + 1, bn=False),
-            BasicBlock(2 * channels[3] + 1, 2 * channels[3] + 1, bn=False),
-            BasicBlock(2 * channels[2] + 1, 2 * channels[2] + 1, bn=False),
-            BasicBlock(2 * channels[1] + 1, 2 * channels[1] + 1, bn=False),
-            BasicBlock(2 * channels[0] + 1, 2 * channels[0] + 1, bn=False)
-        )
+        self.decoder = nn.Sequential()
+
+        for scale in (4, 3, 2, 1, 0):
+            block = nn.Sequential()
+
+            for layer in range(layers[scale]):
+                block.append(BasicBlock(2 * channels[scale] + 1, 2 * channels[scale] + 1, bn=False))
+
+            self.decoder.append(block)
 
         self.upsample = nn.Sequential(
             Upsample(2 * channels[5] + 1, 2 * channels[4] + 1, bn=False),
