@@ -48,7 +48,7 @@ class SIMP(pl.LightningModule):
 
         self.extraction = MultiScaleFeatureExtration(layers, channels)
         self.cas_pam = CasPAM(pam_layers, channels[2:])
-        self.transfer = MultiScaleTransfer(tuple([1, 1] + list(layers)), channels)
+        self.transfer = MultiScaleTransfer(tuple([2, 2] + list(layers)), channels)
 
     def forward(self, left, right):
         b, _, h, w = left.shape
