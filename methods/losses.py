@@ -21,7 +21,7 @@ def loss_pam_photometric(img_left, img_right, att, valid_mask):
 
 
 def loss_pam_photometric_multiscale(img_left, img_right, att, valid_mask):
-    weight = [0.2, 0.3, 0.5]
+    weight = [0.05, 0.15, 0.3, 0.5]
     loss = torch.zeros(1).to(img_left.device)
 
     for idx_scale in range(len(att)):
@@ -48,7 +48,7 @@ def loss_pam_cycle(att_cycle, valid_mask):
 
 
 def loss_pam_cycle_multiscale(att_cycle, valid_mask):
-    weight = [0.2, 0.3, 0.5]
+    weight = [0.05, 0.15, 0.3, 0.5]
     loss = torch.zeros(1).to(att_cycle[0][0].device)
 
     for idx_scale in range(len(att_cycle)):
@@ -71,7 +71,7 @@ def loss_pam_smoothness(att):
 
 
 def loss_pam_smoothness_multiscale(att):
-    weight = [0.2, 0.3, 0.5]
+    weight = [0.05, 0.15, 0.3, 0.5]
     loss = torch.zeros(1).to(att[0][0].device)
 
     for idx_scale in range(len(att)):

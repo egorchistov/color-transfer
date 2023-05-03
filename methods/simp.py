@@ -35,19 +35,19 @@ from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiSca
 class SIMP(pl.LightningModule):
     def __init__(self,
                  layers: tuple[int, ...] = (2, 2, 2, 2),
-                 pam_layers: tuple[int, ...] = (4, 4, 4),
+                 pam_layers: tuple[int, ...] = (4, 4, 4, 4),
                  channels: tuple[int, ...] = (16, 32, 64, 128, 256, 512),
                  num_logged_images: int = 3):
         super().__init__()
 
         assert len(layers) == 4
-        assert len(pam_layers) == 3
+        assert len(pam_layers) == 4
         assert len(channels) == 6
 
         self.num_logged_images = num_logged_images
 
         self.extraction = MultiScaleFeatureExtration(layers, channels)
-        self.cas_pam = CasPAM(pam_layers, channels[2:5])
+        self.cas_pam = CasPAM(pam_layers, channels[2:])
         self.transfer = MultiScaleTransfer(channels)
 
     def forward(self, left, right):
@@ -56,21 +56,20 @@ class SIMP(pl.LightningModule):
         fea_left = self.extraction(left)
         fea_right = self.extraction(right)
 
-        costs = self.cas_pam(fea_left[-3:], fea_right[-3:])
+        costs = self.cas_pam(fea_left[-4:], fea_right[-4:])
 
-        att_s1, att_cycle_s1, valid_mask_s1 = output(costs[0])
-        att_s2, att_cycle_s2, valid_mask_s2 = output(costs[1])
-        att_s3, att_cycle_s3, valid_mask_s3 = output(costs[2])
+        att_s0, att_cycle_s0, valid_mask_s0 = output(costs[0])
+        att_s1, att_cycle_s1, valid_mask_s1 = output(costs[1])
+        att_s2, att_cycle_s2, valid_mask_s2 = output(costs[2])
+        att_s3, att_cycle_s3, valid_mask_s3 = output(costs[3])
 
-        # PAM_stage at 1/2 and 1 scales consumes too much memory
         att_s4_0 = F.interpolate(att_s3[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
         att_s5_0 = F.interpolate(att_s3[0].unsqueeze(1), scale_factor=4, mode="trilinear", align_corners=False).squeeze(1)
-        att_s0_0 = F.interpolate(att_s1[0].unsqueeze(1), scale_factor=0.5, mode="trilinear", align_corners=False).squeeze(1)
 
         fea_warped_right = [
             torch.matmul(att, image.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for image, att in zip(
                 fea_right[:-3],
-                [att_s5_0, att_s4_0, att_s3[0], att_s2[0], att_s1[0], att_s0_0]
+                [att_s5_0, att_s4_0, att_s3[0], att_s2[0], att_s1[0], att_s0[0]]
             )
         ]
 
@@ -80,7 +79,7 @@ class SIMP(pl.LightningModule):
             valid_mask_s3[0],
             valid_mask_s2[0],
             valid_mask_s1[0],
-            F.interpolate(valid_mask_s1[0].float(), scale_factor=0.5, mode="nearest")
+            valid_mask_s0[0]
         ]
 
         corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
@@ -88,9 +87,9 @@ class SIMP(pl.LightningModule):
         warped_right = torch.matmul(att_s5_0, right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
         return corrected_left, (
-            [att_s1, att_s2, att_s3],
-            [att_cycle_s1, att_cycle_s2, att_cycle_s3],
-            [valid_mask_s1, valid_mask_s2, valid_mask_s3],
+            [att_s0, att_s1, att_s2, att_s3],
+            [att_cycle_s0, att_cycle_s1, att_cycle_s2, att_cycle_s3],
+            [valid_mask_s0, valid_mask_s1, valid_mask_s2, valid_mask_s3],
             warped_right
         )
 
