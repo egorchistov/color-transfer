@@ -57,7 +57,7 @@ class MultiScaleFeatureExtration(nn.Module):
 
         self.decoder = nn.Sequential()
 
-        for scale in (4, 3, 2, 1, 0):
+        for scale in (4, 3, 2):
             block = nn.Sequential(Upsample(channels[scale + 1], channels[scale]))
 
             for layer in range(1, layers[scale - 2]):
