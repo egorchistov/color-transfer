@@ -97,7 +97,7 @@ class SIMP(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left, (att, att_cycle, valid_mask, warped_right) = self(left, right)
+        corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
 
         loss_pm = loss_pam_photometric_multiscale(left, right, att, valid_mask)
         loss_smooth = 0.1 * loss_pam_smoothness_multiscale(att)
@@ -106,7 +106,7 @@ class SIMP(pl.LightningModule):
         loss_cc = F.l1_loss(corrected_left, left_gt) + \
             F.mse_loss(corrected_left, left_gt) + \
             ssim_loss(corrected_left, left_gt, window_size=11) + \
-            self.loss_perceptual(corrected_left, warped_right)
+            self.loss_perceptual(corrected_left, right)
 
         loss = loss_cc + 0.005 * (loss_pm + loss_smooth + loss_cycle)
 
