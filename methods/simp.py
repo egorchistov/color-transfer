@@ -106,7 +106,7 @@ class SIMP(pl.LightningModule):
         loss_cc = F.l1_loss(corrected_left, left_gt) + \
             F.mse_loss(corrected_left, left_gt) + \
             ssim_loss(corrected_left, left_gt, window_size=11) + \
-            self.loss_perceptual(corrected_left, right)
+            0.05 * self.loss_perceptual(corrected_left, left, right)
 
         loss = loss_cc + 0.005 * (loss_pm + loss_smooth + loss_cycle)
 
