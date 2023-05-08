@@ -104,8 +104,8 @@ class SIMP(pl.LightningModule):
 
         valid_mask = F.interpolate(valid_mask[-1][0].float(), scale_factor=4, mode="nearest")
 
-        loss_cc = F.l1_loss(corrected_left, warped_right) + \
-            F.mse_loss(corrected_left, warped_right) + \
+        loss_cc = F.l1_loss(corrected_left * valid_mask, warped_right * valid_mask) + \
+            F.mse_loss(corrected_left * valid_mask, warped_right * valid_mask) + \
             ssim_loss(corrected_left, left_gt, window_size=11)
 
         loss = loss_cc + 0.005 * (loss_pm + loss_smooth + loss_cycle)
