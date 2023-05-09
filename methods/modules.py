@@ -30,9 +30,9 @@ class FeatureExtration(nn.Module):
     def __init__(self, layers: int, channels: int):
         super().__init__()
 
-        body = nn.Sequential(nn.Conv2d(3, channels, kernel_size=3, padding=1))
+        self.body = nn.Sequential(nn.Conv2d(3, channels, kernel_size=3, padding=1))
         for _ in range(layers):
-            body.append(BasicBlock(channels, channels, bn=False, weighted_shortcut=False))
+            self.body.append(BasicBlock(channels, channels, bn=False, weighted_shortcut=False))
 
     def forward(self, x):
         return self.body(x)
