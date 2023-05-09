@@ -5,7 +5,7 @@
     ·
     <a href="https://github.com/illaitar">Nikita Alutis</a>
     ·
-    <a href="https://istina.msu.ru/workers/288185986/">Maxim Velikanov</a>
+    <a href="https://istina.msu.ru/profile/VelikanovMS/">Maxim Velikanov</a>
     ·
     <a href="https://linkedin.com/in/dmitriyvatolin">Dmitriy Vatolin</a>
 </p>
@@ -17,7 +17,7 @@
     |
     <a href="https://wandb.ai/egorchistov/color-transfer">WandB</a>
     |
-    <a href="https://colab.research.google.com/drive/1ETK4KniQwMl_8re-f5-qHc-pF4bIu07t?usp=sharing">Colab</a>
+    <a href="https://colab.research.google.com/drive/1AnKJIJTpTpoWShP_36Jdq4sjMhSyTCMK?usp=sharing">Colab</a>
 </h3>
 
 <p align="center"><img src="graphics/distortion-example.webp" alt="Color Mismatch Example"></p>
@@ -45,7 +45,10 @@ pip install -qr requirements.txt
 Given an image pair or a video sequence, our code supports generating color correction results. Please refer to [colab](https://colab.research.google.com/drive/1ETK4KniQwMl_8re-f5-qHc-pF4bIu07t?usp=sharing) and `eval.py` file for example usages.
 
 <p align="center"><img src="graphics/methods-comparison.webp" alt="Color-Mismatch-Correction Methods Comparison"></p>
-<p align="center"><i>Examples of color-mismatch correction. The first stereopair is from the artificial dataset; the second is from the real-world dataset.</i></p>
+<p align="center"><i>Examples of color-mismatch correction. For each example upper part is from ground truth view. The first stereopair is from the artificial dataset; the second is from the real-world dataset.</i></p>
+
+<p align="center"><img src="graphics/methods-comparison-diff.webp" alt="Color-Mismatch-Correction Methods Comparison"></p>
+<p align="center"><i>Normalized absolute difference between ground truth and method result. The first stereopair is from the artificial dataset; the second is from the real-world dataset.</i></p>
 
 ## Datasets
 

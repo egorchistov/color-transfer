@@ -29,20 +29,20 @@ if __name__ == "__main__":
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
     api = wandb.Api()
 
-    for image_dir, model in zip(datasets, ["1v459lhl:v0", "1v459lhl:v0"]):
-        artifact_dir = api.artifact(f"egorchistov/color-transfer/model-{model}").download()
-        dcmc = DCMC.load_from_checkpoint(os.path.join(artifact_dir, "model.ckpt"))
-        dcmc.to(device)
-        dcmc.eval()
+    artifact_dir = api.artifact(f"egorchistov/color-transfer/model-1v459lhl:v0").download()
+    dcmc = DCMC.load_from_checkpoint(os.path.join(artifact_dir, "model.ckpt"))
+    dcmc.to(device)
+    dcmc.eval()
 
+    for image_dir in datasets:
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_DCMC.png",
                partial(run_nn, device=device, model=dcmc))
 
-    for image_dir, model in zip(datasets, ["9rk4vdu5:v0", "3mqa2f4u:v0"]):
-        artifact_dir = api.artifact(f"egorchistov/color-transfer/model-{model}").download()
-        simp = SIMP.load_from_checkpoint(os.path.join(artifact_dir, "model.ckpt"))
-        simp.to(device)
-        simp.eval()
+    artifact_dir = api.artifact(f"egorchistov/color-transfer/model-o18u4r3g:v0").download()
+    simp = SIMP.load_from_checkpoint(os.path.join(artifact_dir, "model.ckpt"))
+    simp.to(device)
+    simp.eval()
 
+    for image_dir, model in datasets:
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_SIMP.png",
                partial(run_nn, device=device, model=simp))
