@@ -42,10 +42,12 @@ pip install -qr requirements.txt
 
 ## Demo
 
-Given an image pair or a video sequence, our code supports generating color correction results. Please refer to [colab](https://colab.research.google.com/drive/1ETK4KniQwMl_8re-f5-qHc-pF4bIu07t?usp=sharing) and `eval.py` file for example usages.
+Given an image pair or a video sequence, our code supports generating color correction results. Please refer to [colab](https://colab.research.google.com/drive/1AnKJIJTpTpoWShP_36Jdq4sjMhSyTCMK?usp=sharing) and `eval.py` file for example usages.
 
 <p align="center"><img src="graphics/methods-comparison.webp" alt="Color-Mismatch-Correction Methods Comparison"></p>
 <p align="center"><i>Examples of color-mismatch correction. For each example upper part is from ground truth view. The first stereopair is from the artificial dataset; the second is from the real-world dataset.</i></p>
+
+Below you can see normalized absolute difference between ground truth and method result.
 
 <p align="center"><img src="graphics/methods-comparison-diff.webp" alt="Color-Mismatch-Correction Methods Comparison"></p>
 <p align="center"><i>Normalized absolute difference between ground truth and method result. The first stereopair is from the artificial dataset; the second is from the real-world dataset.</i></p>
