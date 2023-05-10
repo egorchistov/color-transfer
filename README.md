@@ -50,7 +50,7 @@ Given an image pair or a video sequence, our code supports generating color corr
 Below you can see normalized absolute difference between ground truth and method result.
 
 <p align="center"><img src="graphics/methods-comparison-diff.webp" alt="Color-Mismatch-Correction Methods Comparison"></p>
-<p align="center"><i>Normalized absolute difference between ground truth and method result. The first stereopair is from the artificial dataset; the second is from the real-world dataset.</i></p>
+<p align="center"><i>Normalized absolute difference between left ground truth and left corrected view. Right view left unchanged. The first stereopair is from the artificial dataset; the second is from the real-world dataset.</i></p>
 
 ## Datasets
 
