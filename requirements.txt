@@ -6,7 +6,7 @@ numpy
 scipy
 torch
 kornia
-pytorch_lightning
+pytorch_lightning[extra]
 torchvision
 pillow
 wandb

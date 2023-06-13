@@ -64,7 +64,7 @@ We created the following datasets to train and evaluate available models:
 Use this command to start training:
 
 ```shell
-python trainer.py fit --config configs/simp.py
+python trainer.py fit --config configs/simp.yaml
 ```
 
 Refer to [WandB](http://wandb.ai/egorchistov/color-transfer) for training history of available models.
