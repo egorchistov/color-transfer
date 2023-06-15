@@ -43,6 +43,6 @@ if __name__ == "__main__":
     simp.to(device)
     simp.eval()
 
-    for image_dir, model in datasets:
+    for image_dir in datasets:
         runner(image_dir / "%04d_LD.png", image_dir / "%04d_R.png", image_dir / "%04d_SIMP.png",
                partial(run_nn, device=device, model=simp))
