@@ -75,9 +75,9 @@ trainer:
   default_root_dir: null
 ckpt_path: null
 model:
-  class_path: methods.simp.SIMP
+  class_path: methods.dcmc.DCMC
   init_args:
-    num_logged_images: 4
+    num_logged_images: 3
 data:
   class_path: data.DataModule
   init_args:
