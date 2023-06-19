@@ -41,11 +41,10 @@ class Dataset(data.Dataset):
 
 
 class DataModule(LightningDataModule):
-    def __init__(self, image_dir: Path, crop_size: tuple[int, int], magnitude: float, batch_size: int,
-                 num_workers: int = 0):
+    def __init__(self, image_dir, crop_size, magnitude, batch_size, num_workers = 0):
         super().__init__()
 
-        self.image_dir = image_dir
+        self.image_dir = Path(image_dir)
         self.crop_size = crop_size
         self.magnitude = magnitude
         self.batch_size = batch_size
@@ -82,5 +81,5 @@ class DataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = DataModule(Path("Artificial Dataset"), crop_size=(256, 512), magnitude=0.3, batch_size=16)
+    datamodule = DataModule("Artificial Dataset", crop_size=(256, 512), magnitude=0.3, batch_size=16)
     datamodule.plot_example()

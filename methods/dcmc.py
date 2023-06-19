@@ -30,7 +30,7 @@ from methods.modules import FeatureExtration, PAB, output, Transfer
 
 
 class DCMC(pl.LightningModule):
-    def __init__(self, num_logged_images: int = 3):
+    def __init__(self, num_logged_images = 3):
         super().__init__()
 
         self.num_logged_images = num_logged_images

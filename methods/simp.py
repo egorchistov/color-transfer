@@ -34,10 +34,10 @@ from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiSca
 
 class SIMP(pl.LightningModule):
     def __init__(self,
-                 layers: tuple[int, ...] = (2, 2, 2, 2),
-                 pam_layers: tuple[int, ...] = (4, 4, 4, 4),
-                 channels: tuple[int, ...] = (16, 32, 64, 128, 256, 512),
-                 num_logged_images: int = 3):
+                 layers = (2, 2, 2, 2),
+                 pam_layers = (4, 4, 4, 4),
+                 channels = (16, 32, 64, 128, 256, 512),
+                 num_logged_images = 3):
         super().__init__()
 
         assert len(layers) == 4
