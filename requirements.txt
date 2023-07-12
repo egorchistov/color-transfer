@@ -11,3 +11,4 @@ torchvision
 pillow
 wandb
 pytest
+piq

@@ -27,6 +27,7 @@ from kornia.losses import ssim_loss
 from kornia.metrics import psnr, ssim
 import torch.nn.functional as F
 from pytorch_lightning.loggers import WandbLogger
+from piq import fsim, FSIMLoss
 
 from methods.losses import loss_pam_photometric_multiscale, loss_pam_cycle_multiscale, loss_pam_smoothness_multiscale
 from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiScaleTransfer
@@ -49,6 +50,8 @@ class SIMP(pl.LightningModule):
         self.extraction = MultiScaleFeatureExtration(layers, channels)
         self.cas_pam = CasPAM(pam_layers, channels[2:])
         self.transfer = MultiScaleTransfer(tuple([2, 2] + list(layers)), channels)
+
+        self.fsimc = FSIMLoss()
 
     def forward(self, left, right):
         b, _, h, w = left.shape
@@ -98,20 +101,26 @@ class SIMP(pl.LightningModule):
 
         corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
 
+        loss_l1 = F.l1_loss(corrected_left, left_gt)
+        loss_mse = F.mse_loss(corrected_left, left_gt)
+        loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
+        loss_fsimc = self.fsimc(corrected_left.clamp(0, 1), left_gt)
+
         loss_pm = loss_pam_photometric_multiscale(left, right, att, valid_mask)
         loss_smooth = 0.1 * loss_pam_smoothness_multiscale(att)
         loss_cycle = loss_pam_cycle_multiscale(att_cycle, valid_mask)
 
-        loss_cc = F.l1_loss(corrected_left, left_gt) + \
-            F.mse_loss(corrected_left, left_gt) + \
-            ssim_loss(corrected_left, left_gt, window_size=11)
+        loss = loss_l1 + loss_mse + loss_ssim + loss_fsimc + 0.005 * (loss_pm + loss_smooth + loss_cycle)
 
-        loss = loss_cc + 0.005 * (loss_pm + loss_smooth + loss_cycle)
+        self.log("L1 Loss", loss_l1)
+        self.log("MSE Loss", loss_mse)
+        self.log("SSIM Loss", loss_ssim)
+        self.log("FSIMc Loss", loss_fsimc)
 
         self.log("Photometric Loss", 0.005 * loss_pm)
         self.log("Smoothness Loss",  0.005 * loss_smooth)
         self.log("Cycle Loss",  0.005 * loss_cycle)
-        self.log("Color Correction Loss", loss_cc)
+
         self.log("Loss", loss)
 
         return loss
@@ -123,9 +132,11 @@ class SIMP(pl.LightningModule):
 
         psnr_value = psnr(corrected_left, left_gt, max_val=1)
         ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()
+        fsimc_value = fsim(corrected_left.clamp(0, 1), left_gt)
 
         self.log("PSNR", psnr_value)
         self.log("SSIM", ssim_value)
+        self.log("FSIMc", fsimc_value)
 
         if batch_idx == 0 and isinstance(self.logger, WandbLogger):
             self.logger.log_image(
