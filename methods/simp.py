@@ -104,7 +104,7 @@ class SIMP(pl.LightningModule):
         loss_l1 = F.l1_loss(corrected_left, left_gt)
         loss_mse = F.mse_loss(corrected_left, left_gt)
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
-        loss_fsimc = self.fsimc(corrected_left.clamp(0, 1), left_gt)
+        loss_fsimc = self.fsimc(torch.nan_to_num(corrected_left).clamp(0, 1), left_gt)
 
         loss_pm = loss_pam_photometric_multiscale(left, right, att, valid_mask)
         loss_smooth = 0.1 * loss_pam_smoothness_multiscale(att)
@@ -132,7 +132,7 @@ class SIMP(pl.LightningModule):
 
         psnr_value = psnr(corrected_left, left_gt, max_val=1)
         ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()
-        fsimc_value = fsim(corrected_left.clamp(0, 1), left_gt)
+        fsimc_value = fsim(torch.nan_to_num(corrected_left).clamp(0, 1), left_gt)
 
         self.log("PSNR", psnr_value)
         self.log("SSIM", ssim_value)
