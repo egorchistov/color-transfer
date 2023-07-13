@@ -26,7 +26,7 @@ trainer:
     init_args:
       dirpath: null
       filename: null
-      monitor: PSNR
+      monitor: FSIM
       verbose: false
       save_last: null
       save_top_k: 1
