@@ -27,9 +27,8 @@ from kornia.losses import ssim_loss
 import torch.nn.functional as F
 from piq import psnr, ssim, fsim
 
-from methods.losses import loss_pam_photometric_multiscale, loss_pam_cycle_multiscale, loss_pam_smoothness_multiscale
 from methods.modules import MultiScaleFeatureExtration, CasPAM, MultiScaleTransfer
-from methods.modules import output, upscale_att, warp
+from methods.modules import cas_outputs, warp
 
 
 class SIMP(pl.LightningModule):
@@ -44,71 +43,47 @@ class SIMP(pl.LightningModule):
 
         self.extraction = MultiScaleFeatureExtration(layers, channels)
         self.cas_pam = CasPAM(pam_layers, channels[2:])
-        self.transfer = MultiScaleTransfer(tuple([2, 2] + list(layers)), channels)
+        self.transfer = MultiScaleTransfer((2, 2) + tuple(layers), channels)
 
     def forward(self, left, right):
         b, _, h, w = left.shape
 
         fea_left = self.extraction(left)
         fea_right = self.extraction(right)
+
         costs = self.cas_pam(fea_left[-4:], fea_right[-4:])
 
-        att_s0, att_cycle_s0, valid_mask_s0 = output(costs[0])
-        att_s1, att_cycle_s1, valid_mask_s1 = output(costs[1])
-        att_s2, att_cycle_s2, valid_mask_s2 = output(costs[2])
-        att_s3, att_cycle_s3, valid_mask_s3 = output(costs[3])
-        att_s4 = upscale_att(att_s3)
-        att_s5 = upscale_att(att_s4)
-
-        atts = [att_s0, att_s1, att_s2, att_s3, att_s4, att_s5]
-
-        valid_masks = [
-            F.interpolate(valid_mask_s3[0].float(), scale_factor=4, mode="nearest"),
-            F.interpolate(valid_mask_s3[0].float(), scale_factor=2, mode="nearest"),
-            valid_mask_s3[0],
-            valid_mask_s2[0],
-            valid_mask_s1[0],
-            valid_mask_s0[0]
-        ]
+        atts, atts_cycle, valid_masks = cas_outputs(costs, n_iterpolations_at_end=2)
 
         fea_warped_right = [
             warp(image, att[0])
             for image, att in zip(fea_right[:-3], atts[::-1])
         ]
 
+        valid_masks = [x[0] for x in valid_masks[::-1]]
         corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
 
-        warped_right = warp(right, atts[-1][0])
-
-        return corrected_left, (
-            atts[:4],
-            [att_cycle_s0, att_cycle_s1, att_cycle_s2, att_cycle_s3],
-            [valid_mask_s0, valid_mask_s1, valid_mask_s2, valid_mask_s3],
-            warped_right
-        )
+        return corrected_left, atts[-1][0]
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
+        corrected_left, _ = self(left, right)
 
         loss_mse = F.mse_loss(corrected_left, left_gt)
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
 
-        loss = loss_mse + loss_ssim
-
         self.log("MSE Loss", loss_mse)
         self.log("SSIM Loss", loss_ssim)
 
-        self.log("Loss", loss)
-
-        return loss
+        return loss_mse + loss_ssim
 
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left, (_, _, _, warped_right) = self(left, right)
+        corrected_left, att = self(left, right)
         corrected_left = corrected_left.clamp(0, 1)
+        warped_right = warp(right, att)
 
         self.log("PSNR", psnr(corrected_left, left_gt))
         self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
