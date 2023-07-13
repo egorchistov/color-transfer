@@ -93,16 +93,14 @@ class SIMP(pl.LightningModule):
         corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
 
         loss_huber = F.smooth_l1_loss(corrected_left, left_gt)
-        loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
 
         loss_pm = 0.005 * loss_pam_photometric_multiscale(left, right, att, valid_mask)
         loss_cycle = 0.005 * loss_pam_cycle_multiscale(att_cycle, valid_mask)
         loss_smooth = 0.0005 * loss_pam_smoothness_multiscale(att)
 
-        loss = loss_huber + loss_ssim + loss_pm + loss_cycle + loss_smooth
+        loss = loss_huber + loss_pm + loss_cycle + loss_smooth
 
         self.log("Huber Loss", loss_huber)
-        self.log("SSIM Loss", loss_ssim)
 
         self.log("Photometric Loss", loss_pm)
         self.log("Cycle Loss",  loss_cycle)
