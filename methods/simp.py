@@ -92,7 +92,6 @@ class SIMP(pl.LightningModule):
 
         corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
 
-        loss_l1 = F.l1_loss(corrected_left, left_gt)
         loss_mse = F.mse_loss(corrected_left, left_gt)
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
 
@@ -100,9 +99,8 @@ class SIMP(pl.LightningModule):
         loss_cycle = 0.005 * loss_pam_cycle_multiscale(att_cycle, valid_mask)
         loss_smooth = 0.0005 * loss_pam_smoothness_multiscale(att)
 
-        loss = loss_l1 + loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
+        loss = loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
 
-        self.log("L1 Loss", loss_l1)
         self.log("MSE Loss", loss_mse)
         self.log("SSIM Loss", loss_ssim)
 
