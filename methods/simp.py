@@ -70,13 +70,13 @@ class SIMP(pl.LightningModule):
 
         corrected_left, _ = self(left, right)
 
-        loss_mse = F.mse_loss(corrected_left, left_gt)
-        loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
+        loss_huber = F.smooth_l1_loss(corrected_left, left_gt)
+        loss_ssim = 0.1 * ssim_loss(corrected_left, left_gt, window_size=11)
 
-        self.log("MSE Loss", loss_mse)
+        self.log("Huber Loss", loss_huber)
         self.log("SSIM Loss", loss_ssim)
 
-        return loss_mse + loss_ssim
+        return loss_huber + loss_ssim
 
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
