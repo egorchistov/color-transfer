@@ -24,26 +24,21 @@ Citation
 import torch
 import pytorch_lightning as pl
 from kornia.losses import ssim_loss
-from kornia.metrics import psnr, ssim
 import torch.nn.functional as F
-from pytorch_lightning.loggers import WandbLogger
-from piq import fsim
+from piq import psnr, ssim, fsim
 
 from methods.losses import loss_pam_photometric_multiscale, loss_pam_cycle_multiscale, loss_pam_smoothness_multiscale
-from methods.modules import MultiScaleFeatureExtration, CasPAM, output, MultiScaleTransfer
+from methods.modules import MultiScaleFeatureExtration, CasPAM, MultiScaleTransfer
+from methods.modules import output, upscale_att, warp
 
 
 class SIMP(pl.LightningModule):
     def __init__(self,
-                 layers = (2, 2, 2, 2),
-                 pam_layers = (4, 4, 4, 4),
-                 channels = (16, 32, 64, 128, 256, 512),
-                 num_logged_images = 3):
+                 layers=(2, 2, 2, 2),
+                 pam_layers=(4, 4, 4, 4),
+                 channels=(16, 32, 64, 128, 256, 512),
+                 num_logged_images=3):
         super().__init__()
-
-        assert len(layers) == 4
-        assert len(pam_layers) == 4
-        assert len(channels) == 6
 
         self.num_logged_images = num_logged_images
 
@@ -62,16 +57,10 @@ class SIMP(pl.LightningModule):
         att_s1, att_cycle_s1, valid_mask_s1 = output(costs[1])
         att_s2, att_cycle_s2, valid_mask_s2 = output(costs[2])
         att_s3, att_cycle_s3, valid_mask_s3 = output(costs[3])
+        att_s4 = upscale_att(att_s3)
+        att_s5 = upscale_att(att_s4)
 
-        att_s4_0 = F.interpolate(att_s3[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
-        att_s5_0 = F.interpolate(att_s3[0].unsqueeze(1), scale_factor=4, mode="trilinear", align_corners=False).squeeze(1)
-
-        fea_warped_right = [
-            torch.matmul(att, image.permute(0, 2, 3, 1)).permute(0, 3, 1, 2) for image, att in zip(
-                fea_right[:-3],
-                [att_s5_0, att_s4_0, att_s3[0], att_s2[0], att_s1[0], att_s0[0]]
-            )
-        ]
+        atts = [att_s0, att_s1, att_s2, att_s3, att_s4, att_s5]
 
         valid_masks = [
             F.interpolate(valid_mask_s3[0].float(), scale_factor=4, mode="nearest"),
@@ -82,12 +71,17 @@ class SIMP(pl.LightningModule):
             valid_mask_s0[0]
         ]
 
+        fea_warped_right = [
+            warp(image, att[0])
+            for image, att in zip(fea_right[:-3], atts[::-1])
+        ]
+
         corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
 
-        warped_right = torch.matmul(att_s5_0, right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        warped_right = warp(right, atts[-1][0])
 
         return corrected_left, (
-            [att_s0, att_s1, att_s2, att_s3],
+            atts[:4],
             [att_cycle_s0, att_cycle_s1, att_cycle_s2, att_cycle_s3],
             [valid_mask_s0, valid_mask_s1, valid_mask_s2, valid_mask_s3],
             warped_right
@@ -97,23 +91,24 @@ class SIMP(pl.LightningModule):
         left, left_gt, right = batch
 
         corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
+
         loss_l1 = F.l1_loss(corrected_left, left_gt)
         loss_mse = F.mse_loss(corrected_left, left_gt)
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
 
-        loss_pm = loss_pam_photometric_multiscale(left, right, att, valid_mask)
-        loss_smooth = 0.1 * loss_pam_smoothness_multiscale(att)
-        loss_cycle = loss_pam_cycle_multiscale(att_cycle, valid_mask)
+        loss_pm = 0.005 * loss_pam_photometric_multiscale(left, right, att, valid_mask)
+        loss_cycle = 0.005 * loss_pam_cycle_multiscale(att_cycle, valid_mask)
+        loss_smooth = 0.0005 * loss_pam_smoothness_multiscale(att)
 
-        loss = loss_l1 + loss_mse + loss_ssim + 0.005 * (loss_pm + loss_smooth + loss_cycle)
+        loss = loss_l1 + loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
 
         self.log("L1 Loss", loss_l1)
         self.log("MSE Loss", loss_mse)
         self.log("SSIM Loss", loss_ssim)
 
-        self.log("Photometric Loss", 0.005 * loss_pm)
-        self.log("Smoothness Loss",  0.005 * loss_smooth)
-        self.log("Cycle Loss",  0.005 * loss_cycle)
+        self.log("Photometric Loss", loss_pm)
+        self.log("Cycle Loss",  loss_cycle)
+        self.log("Smoothness Loss",  loss_smooth)
 
         self.log("Loss", loss)
 
@@ -123,20 +118,17 @@ class SIMP(pl.LightningModule):
         left, left_gt, right = batch
 
         corrected_left, (_, _, _, warped_right) = self(left, right)
+        corrected_left = corrected_left.clamp(0, 1)
 
-        psnr_value = psnr(corrected_left, left_gt, max_val=1)
-        ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()
-        fsimc_value = fsim(corrected_left.clamp(0, 1), left_gt)
+        self.log("PSNR", psnr(corrected_left, left_gt))
+        self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
+        self.log("FSIM", fsim(corrected_left, left_gt))
 
-        self.log("PSNR", psnr_value)
-        self.log("SSIM", ssim_value)
-        self.log("FSIMc", fsimc_value)
-
-        if batch_idx == 0 and isinstance(self.logger, WandbLogger):
+        if batch_idx == 0 and hasattr(self.logger, "log_image"):
             self.logger.log_image(
                 key="Validation",
                 images=[batch[:self.num_logged_images]
-                        for batch in [left, warped_right, corrected_left.clamp(0, 1), left_gt, right]],
+                        for batch in [left, warped_right, corrected_left, left_gt, right]],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
 
     def configure_optimizers(self):
@@ -146,7 +138,6 @@ class SIMP(pl.LightningModule):
             T_max=self.trainer.estimated_stepping_batches,
             eta_min=1e-6)
 
-        return {
-            "optimizer": optimizer,
-            "lr_scheduler": {"scheduler": scheduler, "interval": "step"}
-        }
+        lr_scheduler_dict = {"scheduler": scheduler, "interval": "step"}
+
+        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_dict}

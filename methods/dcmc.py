@@ -20,25 +20,29 @@ Citation
 
 import torch
 import pytorch_lightning as pl
-from kornia.metrics import psnr, ssim
+from piq import psnr, ssim, fsim
 from kornia.losses import ssim_loss
 import torch.nn.functional as F
-from pytorch_lightning.loggers import WandbLogger
 
 from methods.losses import loss_pam_smoothness, loss_pam_photometric, loss_pam_cycle
-from methods.modules import FeatureExtration, PAB, output, Transfer
+from methods.modules import FeatureExtration, PAB, Transfer
+from methods.modules import output, warp
 
 
 class DCMC(pl.LightningModule):
-    def __init__(self, num_logged_images = 3):
+    def __init__(self,
+                 extraction_layers=18,
+                 transfer_layers=6,
+                 channels=64,
+                 num_logged_images=3):
         super().__init__()
 
         self.num_logged_images = num_logged_images
 
-        self.extraction = FeatureExtration(layers=18, channels=64)
-        self.pam = PAB(channels=64, weighted_shortcut=False)
-        self.value = torch.nn.Conv2d(64, 64, kernel_size=1)
-        self.transfer = Transfer(layers=6, channels=64)
+        self.extraction = FeatureExtration(layers=extraction_layers, channels=channels)
+        self.pam = PAB(channels=channels, weighted_shortcut=False)
+        self.value = torch.nn.Conv2d(channels, channels, kernel_size=1)
+        self.transfer = Transfer(layers=transfer_layers, channels=channels)
 
     def forward(self, left, right):
         fea_left = self.extraction(left)
@@ -50,11 +54,11 @@ class DCMC(pl.LightningModule):
 
         att, att_cycle, valid_mask = output(cost)
 
-        fea_warped_right = torch.matmul(att[0], self.value(fea_right).permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        fea_warped_right = warp(fea_right, att[0])
 
         corrected_left = self.transfer(fea_left, fea_warped_right, valid_mask)
 
-        warped_right = torch.matmul(att[0], right.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+        warped_right = warp(right, att[0])
 
         return corrected_left, (
             att,
@@ -68,20 +72,24 @@ class DCMC(pl.LightningModule):
 
         corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
 
-        loss_pm = loss_pam_photometric(left, right, att, valid_mask)
-        loss_smooth = 0.1 * loss_pam_smoothness(att)
-        loss_cycle = loss_pam_cycle(att_cycle, valid_mask)
+        loss_l1 = F.l1_loss(corrected_left, left_gt)
+        loss_mse = F.mse_loss(corrected_left, left_gt)
+        loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
 
-        loss_cc = F.l1_loss(corrected_left, left_gt) + \
-            F.mse_loss(corrected_left, left_gt) + \
-            ssim_loss(corrected_left, left_gt, window_size=11)
+        loss_pm = 0.005 * loss_pam_photometric(left, right, att, valid_mask)
+        loss_cycle = 0.005 * loss_pam_cycle(att_cycle, valid_mask)
+        loss_smooth = 0.0005 * loss_pam_smoothness(att)
 
-        loss = loss_cc + 0.005 * (loss_pm + loss_smooth + loss_cycle)
+        loss = loss_l1 + loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
 
-        self.log("Photometric Loss", 0.005 * loss_pm)
-        self.log("Smoothness Loss",  0.005 * loss_smooth)
-        self.log("Cycle Loss",  0.005 * loss_cycle)
-        self.log("Color Correction Loss", loss_cc)
+        self.log("L1 Loss", loss_l1)
+        self.log("MSE Loss", loss_mse)
+        self.log("SSIM Loss", loss_ssim)
+
+        self.log("Photometric Loss", loss_pm)
+        self.log("Cycle Loss",  loss_cycle)
+        self.log("Smoothness Loss",  loss_smooth)
+
         self.log("Loss", loss)
 
         return loss
@@ -90,21 +98,20 @@ class DCMC(pl.LightningModule):
         left, left_gt, right = batch
 
         corrected_left, (_, _, _, warped_right) = self(left, right)
+        corrected_left = corrected_left.clamp(0, 1)
 
-        psnr_value = psnr(corrected_left, left_gt, max_val=1)
-        ssim_value = ssim(corrected_left, left_gt, window_size=11).mean()
+        self.log("PSNR", psnr(corrected_left, left_gt))
+        self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
+        self.log("FSIM", fsim(corrected_left, left_gt))
 
-        self.log("PSNR", psnr_value)
-        self.log("SSIM", ssim_value)
-
-        if batch_idx == 0 and isinstance(self.logger, WandbLogger):
+        if batch_idx == 0 and hasattr(self.logger, "log_image"):
             self.logger.log_image(
                 key="Validation",
                 images=[batch[:self.num_logged_images]
-                        for batch in [left, warped_right, corrected_left.clamp(0, 1), left_gt, right]],
+                        for batch in [left, warped_right, corrected_left, left_gt, right]],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
 
-        return [optimizer]
+        return {"optimizer": optimizer}

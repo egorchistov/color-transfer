@@ -143,6 +143,31 @@ class PAM(nn.Module):
         return fea_left, fea_right, cost
 
 
+def upscale_att(atts):
+    """Upscale twice matching attention maps using trilinear interpolation
+
+    Parameters
+    ----------
+    atts : pair of two (B, H, W, W) tensors
+        Matching attention maps: att_right2left, att_left2right
+
+    Returns
+    -------
+    x2atts : pair of two (B, Hx2, Wx2, Wx2) tensors
+        Matching attention maps: att_right2left, att_left2right
+
+    """
+    x2atts = []
+
+    for item in atts:
+        item = item.unsqueeze(dim=1)  # (B, H, W, W) -> (B, 1, H, W, W)
+        item = F.interpolate(item, scale_factor=2, mode="trilinear", align_corners=False)
+        item = item.squeeze(dim=1)
+        x2atts.append(item)
+
+    return x2atts
+
+
 class CasPAM(nn.Module):
     def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
         super().__init__()
@@ -185,11 +210,7 @@ class CasPAM(nn.Module):
             fea_left = self.bottlenecks[scale - 1](torch.cat([fea_left, fea_lefts[scale]], dim=1))
             fea_right = self.bottlenecks[scale - 1](torch.cat([fea_right, fea_rights[scale]], dim=1))
 
-            cost_up = [
-                F.interpolate(cost[0].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1),
-                F.interpolate(cost[1].unsqueeze(1), scale_factor=2, mode="trilinear", align_corners=False).squeeze(1)
-            ]
-
+            cost_up = upscale_att(cost)
             fea_left, fea_right, cost = self.stages[scale](fea_left, fea_right, cost_up)
             costs.append(cost)
 
@@ -244,6 +265,28 @@ def output(costs):
     return (att_right2left, att_left2right), \
         (att_left2right2left, att_right2left2right), \
         (valid_mask_left, valid_mask_right)
+
+
+def warp(image, att):
+    """Warp image using matching attention map
+
+    Parameters
+    ----------
+    image : (B, C, H, W) tensor
+        Image to warp
+    att : (B, H, W, W) tensor
+        Matching attention map
+
+    Returns
+    -------
+    image : (B, C, H, W) tensor
+        Warped image
+    """
+    image = image.permute(0, 2, 3, 1)
+    image = torch.matmul(att, image)  # (B, H, W, W) x (B, H, W, C) -> (B, H, W, C)
+    image = image.permute(0, 3, 1, 2)
+
+    return image
 
 
 class Upsample(torch.nn.Module):
