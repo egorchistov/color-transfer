@@ -269,24 +269,21 @@ def output(costs):
 
 def cas_outputs(costs, n_iterpolations_at_end=0):
     atts = []
-    atts_cycle = []
     valid_masks = []
 
     for cost in costs:
-        att, att_cycle, valid_mask = output(cost)
+        att, _, valid_mask = output(cost)
         atts.append(att)
-        atts_cycle.append(att_cycle)
         valid_masks.append(valid_mask)
 
     for _ in range(n_iterpolations_at_end):
         atts.append(upscale_att(atts[-1]))
-        atts_cycle.append(upscale_att(atts_cycle[-1]))
         valid_masks.append([
             F.interpolate(valid_masks[-1][0].float(), scale_factor=2, mode="nearest"),
             F.interpolate(valid_masks[-1][1].float(), scale_factor=2, mode="nearest"),
         ])
 
-    return atts, atts_cycle, valid_masks
+    return atts, valid_masks
 
 
 def warp(image, att):

@@ -53,7 +53,7 @@ class SIMP(pl.LightningModule):
 
         costs = self.cas_pam(fea_left[-4:], fea_right[-4:])
 
-        atts, atts_cycle, valid_masks = cas_outputs(costs, n_iterpolations_at_end=2)
+        atts, valid_masks = cas_outputs(costs, n_iterpolations_at_end=2)
 
         fea_warped_right = [
             warp(image, att[0])
