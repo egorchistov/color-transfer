@@ -343,33 +343,39 @@ class Transfer(nn.Module):
 
 
 class MultiScaleTransfer(nn.Module):
-    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
+    def __init__(self, encoder_channels, n_blocks, use_batchnorm):
         super().__init__()
+
+        self.n_blocks = n_blocks
 
         self.decoder = nn.Sequential()
 
-        for scale in (4, 3, 2, 1, 0):
-            block = nn.Sequential()
+        for i in range(n_blocks):
+            self.decoder.append(
+                BasicBlock(
+                    encoder_channels[-2 - i],
+                    encoder_channels[-2 - i],
+                    bn=use_batchnorm
+                )
+            )
 
-            for layer in range(layers[scale] - 1):
-                block.append(BasicBlock(2 * channels[scale] + 1, 2 * channels[scale] + 1, bn=False))
+        self.upsample = nn.Sequential()
 
-            self.decoder.append(block)
-
-        self.upsample = nn.Sequential(
-            Upsample(2 * channels[5] + 1, 2 * channels[4] + 1, bn=False),
-            Upsample(2 * channels[4] + 1, 2 * channels[3] + 1, bn=False),
-            Upsample(2 * channels[3] + 1, 2 * channels[2] + 1, bn=False),
-            Upsample(2 * channels[2] + 1, 2 * channels[1] + 1, bn=False),
-            Upsample(2 * channels[1] + 1, 2 * channels[0] + 1, bn=False)
-        )
+        for i in range(n_blocks):
+            self.upsample.append(
+                Upsample(
+                    encoder_channels[-1 - i],
+                    encoder_channels[-2 - i],
+                    bn=use_batchnorm
+                )
+            )
 
     def forward(self, *features):
-        x = features[5]
-        x = self.decoder[0](self.upsample[0](x) + features[4])
-        x = self.decoder[1](self.upsample[1](x) + features[3])
-        x = self.decoder[2](self.upsample[2](x) + features[2])
-        x = self.decoder[3](self.upsample[3](x) + features[1])
-        x = self.decoder[4](self.upsample[4](x) + features[0])
+        x = features[-1]
+
+        for i in range(self.n_blocks):
+            x = self.upsample[i](x)
+            x = x + features[-2 - i]
+            x = self.decoder[i](x)
 
         return x

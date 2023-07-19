@@ -44,7 +44,11 @@ class SIMP(pl.LightningModule):
 
         self.encoder = MultiScaleFeatureExtration(layers, channels)
         self.matcher = CasPAM(pam_layers, channels[2:])
-        self.decoder = MultiScaleTransfer((2, 2) + tuple(layers), channels)
+        self.decoder = MultiScaleTransfer(
+            encoder_channels=[2 * x + 1 for x in channels],
+            n_blocks=5,
+            use_batchnorm=False,
+        )
 
         self.segmentation_head = SegmentationHead(
             in_channels=2 * channels[0] + 1,
