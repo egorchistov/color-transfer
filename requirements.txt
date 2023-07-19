@@ -12,3 +12,4 @@ pillow
 wandb
 pytest
 piq
+segmentation-models-pytorch

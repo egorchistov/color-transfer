@@ -26,6 +26,7 @@ import pytorch_lightning as pl
 from kornia.losses import ssim_loss
 import torch.nn.functional as F
 from piq import psnr, ssim, fsim
+from segmentation_models_pytorch.base import SegmentationHead
 
 from methods.modules import MultiScaleFeatureExtration, CasPAM, MultiScaleTransfer
 from methods.modules import cas_outputs, warp
@@ -41,29 +42,38 @@ class SIMP(pl.LightningModule):
 
         self.num_logged_images = num_logged_images
 
-        self.extraction = MultiScaleFeatureExtration(layers, channels)
-        self.cas_pam = CasPAM(pam_layers, channels[2:])
-        self.transfer = MultiScaleTransfer((2, 2) + tuple(layers), channels)
+        self.encoder = MultiScaleFeatureExtration(layers, channels)
+        self.matcher = CasPAM(pam_layers, channels[2:])
+        self.decoder = MultiScaleTransfer((2, 2) + tuple(layers), channels)
+
+        self.segmentation_head = SegmentationHead(
+            in_channels=2 * channels[0] + 1,
+            out_channels=3,
+            activation=None,
+            kernel_size=3,
+        )
 
     def forward(self, left, right):
-        b, _, h, w = left.shape
+        features_left = self.encoder(left)
+        features_right = self.encoder(right)
 
-        fea_left = self.extraction(left)
-        fea_right = self.extraction(right)
-
-        costs = self.cas_pam(fea_left[-4:], fea_right[-4:])
+        costs = self.matcher(features_left[-4:], features_right[-4:])
 
         atts, valid_masks = cas_outputs(costs, n_iterpolations_at_end=2)
 
-        fea_warped_right = [
-            warp(image, att[0])
-            for image, att in zip(fea_right[:-3], atts[::-1])
+        features = [
+            torch.cat([
+                feature_left,
+                warp(feature_right, att[0]),
+                valid_mask[0],
+            ], dim=1)
+            for feature_left, feature_right, att, valid_mask in
+            zip(features_left[:-3], features_right[:-3], atts[::-1], valid_masks[::-1])
         ]
 
-        valid_masks = [x[0] for x in valid_masks[::-1]]
-        corrected_left = self.transfer(fea_left[:-3], fea_warped_right, valid_masks)
+        decoder_output = self.decoder(*features)
 
-        return corrected_left, atts[-1][0]
+        return self.segmentation_head(decoder_output), atts[-1][0]
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch

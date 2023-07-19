@@ -364,13 +364,7 @@ class MultiScaleTransfer(nn.Module):
             Upsample(2 * channels[1] + 1, 2 * channels[0] + 1, bn=False)
         )
 
-        self.bias = nn.Conv2d(2 * channels[0] + 1, 3, kernel_size=1, padding=0, bias=True)
-
-    def forward(self, fea_left, fea_right, valid_masks):
-        features = [
-            torch.cat([left, right, valid_mask], dim=1) for left, right, valid_mask in zip(fea_left, fea_right, valid_masks)
-        ]
-
+    def forward(self, *features):
         x = features[5]
         x = self.decoder[0](self.upsample[0](x) + features[4])
         x = self.decoder[1](self.upsample[1](x) + features[3])
@@ -378,4 +372,4 @@ class MultiScaleTransfer(nn.Module):
         x = self.decoder[3](self.upsample[3](x) + features[1])
         x = self.decoder[4](self.upsample[4](x) + features[0])
 
-        return self.bias(x)
+        return x
