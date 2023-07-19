@@ -27,6 +27,7 @@ from kornia.losses import ssim_loss
 import torch.nn.functional as F
 from piq import psnr, ssim, fsim
 from segmentation_models_pytorch.base import SegmentationHead
+from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 
 from methods.modules import MultiScaleFeatureExtration, CasPAM, MultiScaleTransfer
 from methods.modules import cas_outputs, warp
@@ -44,14 +45,15 @@ class SIMP(pl.LightningModule):
 
         self.encoder = MultiScaleFeatureExtration(layers, channels)
         self.matcher = CasPAM(pam_layers, channels[2:])
-        self.decoder = MultiScaleTransfer(
+        self.decoder = UnetDecoder(
             encoder_channels=[2 * x + 1 for x in channels],
+            decoder_channels=channels[:-1][::-1],
             n_blocks=5,
             use_batchnorm=False,
         )
 
         self.segmentation_head = SegmentationHead(
-            in_channels=2 * channels[0] + 1,
+            in_channels=channels[0],
             out_channels=3,
             activation=None,
             kernel_size=3,
