@@ -64,7 +64,7 @@ class SIMP(pl.LightningModule):
         features_left = self.encoder(left)
         features_right = self.encoder(right)
 
-        atts, valid_masks = self.matcher(features_left[-4:-8:-1], features_right[-4:-8:-1])
+        atts, valid_masks = self.matcher(features_left[:-5:-1], features_right[:-5:-1])
 
         features = [
             torch.cat([
@@ -73,7 +73,7 @@ class SIMP(pl.LightningModule):
                 valid_mask[0],
             ], dim=1)
             for feature_left, feature_right, att, valid_mask in
-            zip(features_left[:-3], features_right[:-3], atts, valid_masks)
+            zip(features_left, features_right, atts, valid_masks)
         ]
 
         decoder_output = self.decoder(*features)
