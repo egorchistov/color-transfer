@@ -30,7 +30,7 @@ from segmentation_models_pytorch.base import SegmentationHead
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 
 from methods.modules import MultiScaleFeatureExtration, CasPAM, MultiScaleTransfer
-from methods.modules import cas_outputs, warp
+from methods.modules import warp
 
 
 class SIMP(pl.LightningModule):
@@ -45,7 +45,7 @@ class SIMP(pl.LightningModule):
         self.num_logged_images = num_logged_images
 
         self.encoder = MultiScaleFeatureExtration(layers, encoder_channels)
-        self.matcher = CasPAM(pam_layers, encoder_channels[2:])
+        self.matcher = CasPAM(pam_layers, encoder_channels[2:], n_iterpolations_at_end=2)
         self.decoder = UnetDecoder(
             encoder_channels=[2 * x + 1 for x in encoder_channels],
             decoder_channels=decoder_channels,
@@ -64,9 +64,7 @@ class SIMP(pl.LightningModule):
         features_left = self.encoder(left)
         features_right = self.encoder(right)
 
-        costs = self.matcher(features_left[-4:], features_right[-4:])
-
-        atts, valid_masks = cas_outputs(costs, n_iterpolations_at_end=2)
+        atts, valid_masks = self.matcher(features_left[-4:-8:-1], features_right[-4:-8:-1])
 
         features = [
             torch.cat([
@@ -75,12 +73,12 @@ class SIMP(pl.LightningModule):
                 valid_mask[0],
             ], dim=1)
             for feature_left, feature_right, att, valid_mask in
-            zip(features_left[:-3], features_right[:-3], atts[::-1], valid_masks[::-1])
+            zip(features_left[:-3], features_right[:-3], atts, valid_masks)
         ]
 
         decoder_output = self.decoder(*features)
 
-        return self.segmentation_head(decoder_output), atts[-1][0]
+        return self.segmentation_head(decoder_output), atts[0][0]
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch

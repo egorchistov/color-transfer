@@ -169,8 +169,10 @@ def upscale_att(atts):
 
 
 class CasPAM(nn.Module):
-    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
+    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...], n_iterpolations_at_end):
         super().__init__()
+
+        self.n_iterpolations_at_end = n_iterpolations_at_end
 
         self.stages = nn.Sequential()
         for stage in range(len(layers)):
@@ -214,7 +216,9 @@ class CasPAM(nn.Module):
             fea_left, fea_right, cost = self.stages[scale](fea_left, fea_right, cost_up)
             costs.append(cost)
 
-        return costs
+        atts, valid_masks = cas_outputs(costs, n_iterpolations_at_end=self.n_iterpolations_at_end)
+
+        return atts[::-1], valid_masks[::-1]
 
 
 def output(costs):
