@@ -77,9 +77,9 @@ ckpt_path: null
 model:
   class_path: methods.simp.SIMP
   init_args:
-    layers: [2, 2, 2, 2]
+    encoder_name: timm-efficientnet-b4
+    encoder_weights: null
     pam_layers: [4, 4, 4, 4]
-    encoder_channels: [16, 32, 64, 128, 256, 512]
     decoder_channels: [512, 256, 128, 64, 32]
     num_logged_images: 3
 data:

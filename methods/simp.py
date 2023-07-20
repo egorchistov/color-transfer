@@ -28,6 +28,7 @@ import torch.nn.functional as F
 from piq import psnr, ssim, fsim
 from segmentation_models_pytorch.base import SegmentationHead
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
+from segmentation_models_pytorch.encoders import get_encoder
 
 from methods.modules import MultiScaleFeatureExtration, CasPAM, MultiScaleTransfer
 from methods.modules import warp
@@ -35,19 +36,22 @@ from methods.modules import warp
 
 class SIMP(pl.LightningModule):
     def __init__(self,
-                 layers=(2, 2, 2, 2),
+                 encoder_name="timm-efficientnet-b4",
+                 encoder_weights=None,
                  pam_layers=(4, 4, 4, 4),
-                 encoder_channels=(16, 32, 64, 128, 256, 512),
                  decoder_channels=(512, 256, 128, 64, 32),
                  num_logged_images=3):
         super().__init__()
 
         self.num_logged_images = num_logged_images
 
-        self.encoder = MultiScaleFeatureExtration(layers, encoder_channels)
-        self.matcher = CasPAM(pam_layers, encoder_channels[2:], n_iterpolations_at_end=2)
+        self.encoder = get_encoder(
+            name=encoder_name,
+            weights=encoder_weights,
+        )
+        self.matcher = CasPAM(pam_layers, self.encoder.out_channels[2:], n_iterpolations_at_end=2)
         self.decoder = UnetDecoder(
-            encoder_channels=[2 * x + 1 for x in encoder_channels],
+            encoder_channels=[2 * x + 1 for x in self.encoder.out_channels],
             decoder_channels=decoder_channels,
             n_blocks=5,
             use_batchnorm=False,
