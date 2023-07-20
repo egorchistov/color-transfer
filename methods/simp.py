@@ -37,23 +37,24 @@ class SIMP(pl.LightningModule):
     def __init__(self,
                  layers=(2, 2, 2, 2),
                  pam_layers=(4, 4, 4, 4),
-                 channels=(16, 32, 64, 128, 256, 512),
+                 encoder_channels=(16, 32, 64, 128, 256, 512),
+                 decoder_channels=(512, 256, 128, 64, 32),
                  num_logged_images=3):
         super().__init__()
 
         self.num_logged_images = num_logged_images
 
-        self.encoder = MultiScaleFeatureExtration(layers, channels)
-        self.matcher = CasPAM(pam_layers, channels[2:])
+        self.encoder = MultiScaleFeatureExtration(layers, encoder_channels)
+        self.matcher = CasPAM(pam_layers, encoder_channels[2:])
         self.decoder = UnetDecoder(
-            encoder_channels=[2 * x + 1 for x in channels],
-            decoder_channels=channels[:-1][::-1],
+            encoder_channels=[2 * x + 1 for x in encoder_channels],
+            decoder_channels=decoder_channels,
             n_blocks=5,
             use_batchnorm=False,
         )
 
         self.segmentation_head = SegmentationHead(
-            in_channels=channels[0],
+            in_channels=decoder_channels[-1],
             out_channels=3,
             activation=None,
             kernel_size=3,
