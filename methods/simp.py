@@ -36,7 +36,7 @@ from methods.modules import warp
 
 class SIMP(pl.LightningModule):
     def __init__(self,
-                 encoder_name="timm-efficientnet-b4",
+                 encoder_name="efficientnet-b2",
                  encoder_weights=None,
                  pam_layers=(4, 4, 4, 4),
                  decoder_channels=(512, 256, 128, 64, 32),

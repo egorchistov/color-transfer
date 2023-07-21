@@ -77,7 +77,7 @@ ckpt_path: null
 model:
   class_path: methods.simp.SIMP
   init_args:
-    encoder_name: timm-efficientnet-b4
+    encoder_name: efficientnet-b2
     encoder_weights: null
     pam_layers: [4, 4, 4, 4]
     decoder_channels: [512, 256, 128, 64, 32]
