@@ -191,6 +191,9 @@ class CasPAM(nn.Module):
         costs : cost list of - for example - scales 1/16, 1/8, 1/4
         """
 
+        fea_lefts = fea_lefts[self.n_iterpolations_at_end:][::-1]
+        fea_rights = fea_rights[self.n_iterpolations_at_end:][::-1]
+
         costs = []
 
         fea_left, fea_right, cost = self.stages[0](fea_lefts[0], fea_rights[0], cost=(0, 0))

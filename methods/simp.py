@@ -38,7 +38,7 @@ class SIMP(pl.LightningModule):
     def __init__(self,
                  encoder_name="efficientnet-b2",
                  encoder_weights=None,
-                 pam_layers=(4, 4, 4, 4),
+                 matcher_layers=(4, 4, 4, 4, 4, 4),
                  decoder_channels=(512, 256, 128, 64, 32),
                  num_logged_images=3):
         super().__init__()
@@ -49,7 +49,13 @@ class SIMP(pl.LightningModule):
             name=encoder_name,
             weights=encoder_weights,
         )
-        self.matcher = CasPAM(pam_layers, self.encoder.out_channels[2:], n_iterpolations_at_end=2)
+
+        self.matcher = CasPAM(
+            layers=matcher_layers,
+            channels=self.encoder.out_channels,
+            n_iterpolations_at_end=6 - len(matcher_layers),
+        )
+
         self.decoder = UnetDecoder(
             encoder_channels=[2 * x + 1 for x in self.encoder.out_channels],
             decoder_channels=decoder_channels,
@@ -68,7 +74,7 @@ class SIMP(pl.LightningModule):
         features_left = self.encoder(left)
         features_right = self.encoder(right)
 
-        atts, valid_masks = self.matcher(features_left[:-5:-1], features_right[:-5:-1])
+        atts, valid_masks = self.matcher(features_left, features_right)
 
         features = [
             torch.cat([
