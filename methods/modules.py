@@ -133,13 +133,15 @@ class PAM(nn.Module):
         return fea_left, fea_right, cost
 
 
-def upscale_att(atts):
+def upscale_att(atts, scale_factor=2):
     """Upscale twice matching attention maps using trilinear interpolation
 
     Parameters
     ----------
     atts : pair of two (B, H, W, W) tensors
         Matching attention maps: att_right2left, att_left2right
+
+    scale_factor: float, default=2
 
     Returns
     -------
@@ -151,7 +153,7 @@ def upscale_att(atts):
 
     for item in atts:
         item = item.unsqueeze(dim=1)  # (B, H, W, W) -> (B, 1, H, W, W)
-        item = F.interpolate(item, scale_factor=2, mode="trilinear", align_corners=False)
+        item = F.interpolate(item, scale_factor=scale_factor, mode="trilinear", align_corners=False)
         item = item.squeeze(dim=1)
         x2atts.append(item)
 
@@ -159,10 +161,8 @@ def upscale_att(atts):
 
 
 class CasPAM(nn.Module):
-    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...], n_iterpolations_at_end):
+    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
         super().__init__()
-
-        self.n_iterpolations_at_end = n_iterpolations_at_end
 
         self.stages = nn.Sequential()
         for stage in range(len(layers)):
@@ -191,8 +191,8 @@ class CasPAM(nn.Module):
         costs : cost list of - for example - scales 1/16, 1/8, 1/4
         """
 
-        fea_lefts = fea_lefts[self.n_iterpolations_at_end:][::-1]
-        fea_rights = fea_rights[self.n_iterpolations_at_end:][::-1]
+        fea_lefts = fea_lefts[::-1]
+        fea_rights = fea_rights[::-1]
 
         costs = []
 
@@ -209,9 +209,15 @@ class CasPAM(nn.Module):
             fea_left, fea_right, cost = self.stages[scale](fea_left, fea_right, cost_up)
             costs.append(cost)
 
-        atts, valid_masks = cas_outputs(costs, n_iterpolations_at_end=self.n_iterpolations_at_end)
+        atts = []
+        valid_masks = []
 
-        return atts[::-1], valid_masks[::-1]
+        for cost in costs[::-1]:
+            att, _, valid_mask = output(cost)
+            atts.append(att)
+            valid_masks.append(valid_mask)
+
+        return atts, valid_masks
 
 
 def output(costs):
@@ -262,25 +268,6 @@ def output(costs):
     return (att_right2left, att_left2right), \
         (att_left2right2left, att_right2left2right), \
         (valid_mask_left, valid_mask_right)
-
-
-def cas_outputs(costs, n_iterpolations_at_end=0):
-    atts = []
-    valid_masks = []
-
-    for cost in costs:
-        att, _, valid_mask = output(cost)
-        atts.append(att)
-        valid_masks.append(valid_mask)
-
-    for _ in range(n_iterpolations_at_end):
-        atts.append(upscale_att(atts[-1]))
-        valid_masks.append([
-            F.interpolate(valid_masks[-1][0].float(), scale_factor=2, mode="nearest"),
-            F.interpolate(valid_masks[-1][1].float(), scale_factor=2, mode="nearest"),
-        ])
-
-    return atts, valid_masks
 
 
 def warp(image, att):

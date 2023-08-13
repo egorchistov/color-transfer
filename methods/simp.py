@@ -30,70 +30,82 @@ from segmentation_models_pytorch.base import SegmentationHead
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 
-from methods.modules import MultiScaleFeatureExtration, CasPAM, MultiScaleTransfer
+from methods.modules import CasPAM
 from methods.modules import warp
 
 
 class SIMP(pl.LightningModule):
     def __init__(self,
                  encoder_name="efficientnet-b2",
+                 encoder_depth=4,
                  encoder_weights=None,
-                 matcher_layers=(4, 4, 4, 4, 4, 4),
-                 decoder_channels=(512, 256, 128, 64, 32),
+                 matcher_skip_idx=2,
+                 matcher_layers=(4, 4, 4),
+                 decoder_channels=(256, 128, 64, 32),
                  num_logged_images=3):
         super().__init__()
 
+        assert matcher_skip_idx + len(matcher_layers) == encoder_depth + 1
+
+        self.matcher_skip_idx = matcher_skip_idx
         self.num_logged_images = num_logged_images
 
         self.encoder = get_encoder(
             name=encoder_name,
+            depth=encoder_depth,
             weights=encoder_weights,
         )
 
         self.matcher = CasPAM(
             layers=matcher_layers,
-            channels=self.encoder.out_channels,
-            n_iterpolations_at_end=6 - len(matcher_layers),
+            channels=self.encoder.out_channels[self.matcher_skip_idx:]
         )
 
+        encoder_out_channels = list(self.encoder.out_channels)
+        encoder_out_channels[self.matcher_skip_idx:] = [
+            2 * channels + 1
+            for channels in encoder_out_channels[self.matcher_skip_idx:]
+        ]
+
         self.decoder = UnetDecoder(
-            encoder_channels=[2 * x + 1 for x in self.encoder.out_channels],
+            encoder_channels=encoder_out_channels,
             decoder_channels=decoder_channels,
-            n_blocks=5,
+            n_blocks=encoder_depth,
             use_batchnorm=False,
         )
 
-        self.segmentation_head = SegmentationHead(
+        self.head = SegmentationHead(
             in_channels=decoder_channels[-1],
             out_channels=3,
-            activation=None,
-            kernel_size=3,
         )
 
     def forward(self, left, right):
         features_left = self.encoder(left)
         features_right = self.encoder(right)
 
-        atts, valid_masks = self.matcher(features_left, features_right)
+        atts, valid_masks = self.matcher(
+            features_left[self.matcher_skip_idx:],
+            features_right[self.matcher_skip_idx:]
+        )
 
-        features = [
+        features_left[self.matcher_skip_idx:] = [
             torch.cat([
                 feature_left,
                 warp(feature_right, att[0]),
-                valid_mask[0],
+                valid_mask[0]
             ], dim=1)
             for feature_left, feature_right, att, valid_mask in
-            zip(features_left, features_right, atts, valid_masks)
+            zip(features_left[self.matcher_skip_idx:], features_right[self.matcher_skip_idx:], atts, valid_masks)
         ]
 
-        decoder_output = self.decoder(*features)
+        decoder_output = self.decoder(*features_left)
 
-        return self.segmentation_head(decoder_output), atts[0][0]
+        return self.head(decoder_output)
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left, _ = self(left, right)
+        corrected_left = self(left, right)
 
         loss_mse = F.mse_loss(corrected_left, left_gt)
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
@@ -106,9 +118,8 @@ class SIMP(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left, att = self(left, right)
+        corrected_left = self(left, right)
         corrected_left = corrected_left.clamp(0, 1)
-        warped_right = warp(right, att)
 
         self.log("PSNR", psnr(corrected_left, left_gt))
         self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
@@ -118,8 +129,8 @@ class SIMP(pl.LightningModule):
             self.logger.log_image(
                 key="Validation",
                 images=[batch[:self.num_logged_images]
-                        for batch in [left, warped_right, corrected_left, left_gt, right]],
-                caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
+                        for batch in [left, corrected_left, left_gt, right]],
+                caption=["Left Distorted", "Left Corrected", "Left", "Right"])
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
