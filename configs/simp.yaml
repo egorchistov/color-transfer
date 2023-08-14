@@ -77,12 +77,12 @@ ckpt_path: null
 model:
   class_path: methods.simp.SIMP
   init_args:
-    encoder_name: efficientnet-b2
-    encoder_depth: 5
+    encoder_name: efficientnet-b4
+    encoder_depth: 4
     encoder_weights: null
     matcher_skip_idx: 2
-    matcher_layers: [4, 4, 4, 4]
-    decoder_channels: [512, 256, 128, 64, 32]
+    matcher_layers: [4, 4, 4]
+    decoder_channels: [256, 128, 64, 32]
     num_logged_images: 3
 data:
   class_path: data.DataModule

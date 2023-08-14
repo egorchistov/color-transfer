@@ -44,38 +44,36 @@ class SIMP(pl.LightningModule):
                  decoder_channels=(256, 128, 64, 32),
                  num_logged_images=3):
         super().__init__()
+        self.save_hyperparameters()
 
-        assert matcher_skip_idx + len(matcher_layers) == encoder_depth + 1
-
-        self.matcher_skip_idx = matcher_skip_idx
-        self.num_logged_images = num_logged_images
+        assert self.hparams.matcher_skip_idx + len(self.hparams.matcher_layers) == self.hparams.encoder_depth + 1
 
         self.encoder = get_encoder(
-            name=encoder_name,
-            depth=encoder_depth,
-            weights=encoder_weights,
+            name=self.hparams.encoder_name,
+            depth=self.hparams.encoder_depth,
+            weights=self.hparams.encoder_weights,
         )
 
         self.matcher = CasPAM(
-            layers=matcher_layers,
-            channels=self.encoder.out_channels[self.matcher_skip_idx:]
+            layers=self.hparams.matcher_layers,
+            channels=self.encoder.out_channels[self.hparams.matcher_skip_idx:]
         )
 
         encoder_out_channels = list(self.encoder.out_channels)
-        encoder_out_channels[self.matcher_skip_idx:] = [
+        encoder_out_channels[self.hparams.matcher_skip_idx:] = [
             2 * channels + 1
-            for channels in encoder_out_channels[self.matcher_skip_idx:]
+            for channels in encoder_out_channels[self.hparams.matcher_skip_idx:]
         ]
 
         self.decoder = UnetDecoder(
             encoder_channels=encoder_out_channels,
-            decoder_channels=decoder_channels,
-            n_blocks=encoder_depth,
+            decoder_channels=self.hparams.decoder_channels,
+            n_blocks=self.hparams.encoder_depth,
             use_batchnorm=False,
         )
 
         self.head = SegmentationHead(
-            in_channels=decoder_channels[-1],
+            in_channels=self.hparams.decoder_channels[-1],
             out_channels=3,
         )
 
@@ -84,18 +82,23 @@ class SIMP(pl.LightningModule):
         features_right = self.encoder(right)
 
         atts, valid_masks = self.matcher(
-            features_left[self.matcher_skip_idx:],
-            features_right[self.matcher_skip_idx:]
+            features_left[self.hparams.matcher_skip_idx:],
+            features_right[self.hparams.matcher_skip_idx:]
         )
 
-        features_left[self.matcher_skip_idx:] = [
+        features_left[self.hparams.matcher_skip_idx:] = [
             torch.cat([
                 feature_left,
                 warp(feature_right, att[0]),
                 valid_mask[0]
             ], dim=1)
             for feature_left, feature_right, att, valid_mask in
-            zip(features_left[self.matcher_skip_idx:], features_right[self.matcher_skip_idx:], atts, valid_masks)
+            zip(
+                features_left[self.hparams.matcher_skip_idx:],
+                features_right[self.hparams.matcher_skip_idx:],
+                atts,
+                valid_masks
+            )
         ]
 
         decoder_output = self.decoder(*features_left)
@@ -128,7 +131,7 @@ class SIMP(pl.LightningModule):
         if batch_idx == 0 and hasattr(self.logger, "log_image"):
             self.logger.log_image(
                 key="Validation",
-                images=[batch[:self.num_logged_images]
+                images=[batch[:self.hparams.num_logged_images]
                         for batch in [left, corrected_left, left_gt, right]],
                 caption=["Left Distorted", "Left Corrected", "Left", "Right"])
 
