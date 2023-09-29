@@ -108,6 +108,8 @@ class SIMP(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
+        left, left_gt, right = left.flatten(end_dim=1), left_gt.flatten(end_dim=1), right.flatten(end_dim=1)
+
         corrected_left = self(left, right)
 
         loss_mse = F.mse_loss(corrected_left, left_gt)
@@ -120,6 +122,8 @@ class SIMP(pl.LightningModule):
 
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
+
+        left, left_gt, right = left.flatten(end_dim=1), left_gt.flatten(end_dim=1), right.flatten(end_dim=1)
 
         corrected_left = self(left, right)
         corrected_left = corrected_left.clamp(0, 1)
