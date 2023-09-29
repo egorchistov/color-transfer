@@ -1,50 +1,63 @@
+import random
 from pathlib import Path
 
 import torch
 import matplotlib.pyplot as plt
-from PIL import Image
 from torch.utils import data
+from torchvision.io import read_video
 from torchvision.utils import make_grid
 from torchvision.transforms import ColorJitter, RandomCrop
-from torchvision.transforms.functional import pad, crop, to_tensor
+from torchvision.transforms.functional import crop
 from pytorch_lightning import LightningDataModule
 
 
 class Dataset(data.Dataset):
-    def __init__(self, image_dir, crop_size, magnitude):
-        self.crop_size = crop_size
-        self.lefts = sorted(image_dir.glob("*_L.png"))
-        self.rights = sorted(image_dir.glob("*_R.png"))
-        self.distortions = ColorJitter(brightness=magnitude, contrast=magnitude, saturation=magnitude, hue=magnitude)
+    def __init__(self, video_dir, n_frames, crop_size, magnitude):
+        self.lefts = sorted(video_dir.glob("*_L.mp4"))
+        self.rights = sorted(video_dir.glob("*_R.mp4"))
 
         assert len(self.lefts) == len(self.rights)
+
+        self.n_frames = n_frames
+        self.crop_size = crop_size
+
+        self.magnitude = magnitude
 
     def __len__(self):
         return len(self.lefts)
 
     def __getitem__(self, index):
-        right = Image.open(self.rights[index]).convert("RGB")
-        left_gt = Image.open(self.lefts[index]).convert("RGB")
+        left_gt, _, _ = read_video(str(self.lefts[index]), output_format="TCHW", pts_unit="sec")
+        right, _, _ = read_video(str(self.rights[index]), output_format="TCHW", pts_unit="sec")
 
-        padding = [max(0, self.crop_size[1] - right.size[0]),
-                   max(0, self.crop_size[0] - right.size[1])]
-
-        right = pad(to_tensor(right), padding)
-        left_gt = pad(to_tensor(left_gt), padding)
+        start_frame = random.randint(0, left_gt.shape[0] - self.n_frames)
+        left_gt = left_gt[start_frame: start_frame + self.n_frames]
+        right = right[start_frame: start_frame + self.n_frames]
 
         crop_params = RandomCrop.get_params(right, output_size=self.crop_size)
+        left_gt = torch.stack([crop(frame, *crop_params) for frame in left_gt])
+        right = torch.stack([crop(frame, *crop_params) for frame in right])
 
-        right = crop(right, *crop_params)
-        left_gt = crop(left_gt, *crop_params)
+        distortion_params = ColorJitter.get_params(
+            brightness=[1 - self.magnitude, 1 + self.magnitude],
+            contrast=[1 - self.magnitude, 1 + self.magnitude],
+            saturation=[1 - self.magnitude, 1 + self.magnitude],
+            hue=[-self.magnitude, self.magnitude])
 
-        return self.distortions(left_gt), left_gt, right
+        distortion = ColorJitter()
+        distortion.get_params = lambda *_: distortion_params
+
+        left = torch.stack([distortion(frame) for frame in left_gt])
+
+        return left / 255, left_gt / 255, right / 255
 
 
 class DataModule(LightningDataModule):
-    def __init__(self, image_dir, crop_size, magnitude, batch_size, num_workers = 0):
+    def __init__(self, video_dir, n_frames, crop_size, magnitude, batch_size, num_workers=0):
         super().__init__()
 
-        self.image_dir = Path(image_dir)
+        self.video_dir = Path(video_dir)
+        self.n_frames = n_frames
         self.crop_size = crop_size
         self.magnitude = magnitude
         self.batch_size = batch_size
@@ -52,24 +65,24 @@ class DataModule(LightningDataModule):
 
     def train_dataloader(self):
         return data.DataLoader(
-            Dataset(self.image_dir / "Train", self.crop_size, self.magnitude),
+            Dataset(self.video_dir / "Train", self.n_frames, self.crop_size, self.magnitude),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            pin_memory=True,
             shuffle=True,
             drop_last=True)
 
     def val_dataloader(self):
         return data.DataLoader(
-            Dataset(self.image_dir / "Validation", self.crop_size, self.magnitude),
+            Dataset(self.video_dir / "Validation", self.n_frames, self.crop_size, self.magnitude),
             batch_size=self.batch_size,
             num_workers=self.num_workers,
-            pin_memory=True,
             shuffle=False,
             drop_last=False)
 
     def plot_example(self):
         left, left_gt, right = next(iter(self.train_dataloader()))
+        left, left_gt, right = left.flatten(end_dim=1), left_gt.flatten(end_dim=1), right.flatten(end_dim=1)
+
         residue = (left - left_gt).abs().clamp(0, 1)
         grid = make_grid([torch.hstack(column) for column in zip(left, residue, left_gt, right)], nrow=8)
 
@@ -81,5 +94,5 @@ class DataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = DataModule("Artificial Dataset", crop_size=(256, 512), magnitude=0.3, batch_size=16)
+    datamodule = DataModule("videos", n_frames=2, crop_size=(400, 960), magnitude=0.3, batch_size=4)
     datamodule.plot_example()
