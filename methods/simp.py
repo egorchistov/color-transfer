@@ -143,7 +143,9 @@ class SIMP(pl.LightningModule):
         corrected_left = self(left, right)
         corrected_left = corrected_left.clamp(0, 1)
 
+        left = left.flatten(end_dim=1)
         left_gt = left_gt.flatten(end_dim=1)
+        right = right.flatten(end_dim=1)
         corrected_left = corrected_left.flatten(end_dim=1)
 
         self.log("PSNR", psnr(corrected_left, left_gt))
