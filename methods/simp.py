@@ -113,7 +113,7 @@ class SIMP(pl.LightningModule):
 
         decoder_output = self.decoder(*features_left)
 
-        decoder_output = self.gru(decoder_output.unflatten(dim=0, sizes=(B, T)))
+        decoder_output, _ = self.gru(decoder_output.unflatten(dim=0, sizes=(B, T)))
 
         cleft = self.head(decoder_output.flatten(end_dim=1))
 
@@ -123,6 +123,9 @@ class SIMP(pl.LightningModule):
         left, left_gt, right = batch
 
         corrected_left = self(left, right)
+
+        left_gt = left_gt.flatten(end_dim=1)
+        corrected_left = corrected_left.flatten(end_dim=1)
 
         loss_mse = F.mse_loss(corrected_left, left_gt)
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
@@ -135,8 +138,13 @@ class SIMP(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
+        _, T, _, _, _ = left.shape
+
         corrected_left = self(left, right)
         corrected_left = corrected_left.clamp(0, 1)
+
+        left_gt = left_gt.flatten(end_dim=1)
+        corrected_left = corrected_left.flatten(end_dim=1)
 
         self.log("PSNR", psnr(corrected_left, left_gt))
         self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
@@ -145,7 +153,7 @@ class SIMP(pl.LightningModule):
         if batch_idx == 0 and hasattr(self.logger, "log_image"):
             self.logger.log_image(
                 key="Validation",
-                images=[batch[:self.hparams.num_logged_images, 0]
+                images=[batch[:self.hparams.num_logged_images * T: T]
                         for batch in [left, corrected_left, left_gt, right]],
                 caption=["Left Distorted", "Left Corrected", "Left", "Right"])
 
