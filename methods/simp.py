@@ -30,6 +30,7 @@ from segmentation_models_pytorch.base import SegmentationHead
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 
+from methods.gru import ConvGRU
 from methods.modules import CasPAM
 from methods.modules import warp
 
@@ -72,12 +73,21 @@ class SIMP(pl.LightningModule):
             use_batchnorm=False,
         )
 
+        self.gru = ConvGRU(
+            channels=self.hparams.decoder_channels[-1],
+        )
+
         self.head = SegmentationHead(
             in_channels=self.hparams.decoder_channels[-1],
             out_channels=3,
         )
 
     def forward(self, left, right):
+        B, T, _, _, _ = left.shape
+
+        left = left.flatten(end_dim=1)
+        right = right.flatten(end_dim=1)
+
         features_left = self.encoder(left)
         features_right = self.encoder(right)
 
@@ -103,12 +113,14 @@ class SIMP(pl.LightningModule):
 
         decoder_output = self.decoder(*features_left)
 
-        return self.head(decoder_output)
+        decoder_output = self.gru(decoder_output.unflatten(dim=0, sizes=(B, T)))
+
+        cleft = self.head(decoder_output.flatten(end_dim=1))
+
+        return cleft.unflatten(dim=0, sizes=(B, T))
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
-
-        left, left_gt, right = left.flatten(end_dim=1), left_gt.flatten(end_dim=1), right.flatten(end_dim=1)
 
         corrected_left = self(left, right)
 
@@ -123,8 +135,6 @@ class SIMP(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        left, left_gt, right = left.flatten(end_dim=1), left_gt.flatten(end_dim=1), right.flatten(end_dim=1)
-
         corrected_left = self(left, right)
         corrected_left = corrected_left.clamp(0, 1)
 
@@ -135,7 +145,7 @@ class SIMP(pl.LightningModule):
         if batch_idx == 0 and hasattr(self.logger, "log_image"):
             self.logger.log_image(
                 key="Validation",
-                images=[batch[:self.hparams.num_logged_images]
+                images=[batch[:self.hparams.num_logged_images, 0]
                         for batch in [left, corrected_left, left_gt, right]],
                 caption=["Left Distorted", "Left Corrected", "Left", "Right"])
 
