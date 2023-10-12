@@ -82,7 +82,7 @@ class SIMP(pl.LightningModule):
             out_channels=3,
         )
 
-    def forward(self, left, right):
+    def forward(self, left, right, h=None):
         B, T, _, _, _ = left.shape
 
         left = left.flatten(end_dim=1)
@@ -113,16 +113,16 @@ class SIMP(pl.LightningModule):
 
         decoder_output = self.decoder(*features_left)
 
-        decoder_output, _ = self.gru(decoder_output.unflatten(dim=0, sizes=(B, T)))
+        decoder_output, h = self.gru(decoder_output.unflatten(dim=0, sizes=(B, T)), h)
 
         cleft = self.head(decoder_output.flatten(end_dim=1))
 
-        return cleft.unflatten(dim=0, sizes=(B, T))
+        return cleft.unflatten(dim=0, sizes=(B, T)), h
 
     def training_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        corrected_left = self(left, right)
+        corrected_left, _ = self(left, right)
 
         left_gt = left_gt.flatten(end_dim=1)
         corrected_left = corrected_left.flatten(end_dim=1)
@@ -140,7 +140,7 @@ class SIMP(pl.LightningModule):
 
         _, T, _, _, _ = left.shape
 
-        corrected_left = self(left, right)
+        corrected_left, _ = self(left, right)
         corrected_left = corrected_left.clamp(0, 1)
 
         left = left.flatten(end_dim=1)
