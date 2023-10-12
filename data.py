@@ -1,10 +1,11 @@
+import itertools
 import random
 from pathlib import Path
 
 import torch
 import matplotlib.pyplot as plt
 from torch.utils import data
-from torchvision.io import read_video
+from torchvision.io import VideoReader
 from torchvision.utils import make_grid
 from torchvision.transforms import ColorJitter, RandomCrop
 from torchvision.transforms.functional import crop
@@ -26,13 +27,24 @@ class Dataset(data.Dataset):
     def __len__(self):
         return len(self.lefts)
 
-    def __getitem__(self, index):
-        left_gt, _, _ = read_video(str(self.lefts[index]), output_format="TCHW", pts_unit="sec")
-        right, _, _ = read_video(str(self.rights[index]), output_format="TCHW", pts_unit="sec")
+    def read_video(self, src: Path):
+        video = VideoReader(str(src), stream="video")
 
-        start_frame = random.randint(0, left_gt.shape[0] - self.n_frames)
-        left_gt = left_gt[start_frame: start_frame + self.n_frames]
-        right = right[start_frame: start_frame + self.n_frames]
+        metadata = video.get_metadata()
+        max_seek = metadata["video"]["duration"][0] - (self.n_frames / metadata["video"]["fps"][0])
+
+        start = random.uniform(0., max_seek)
+
+        frames = torch.stack([
+            frame["data"]
+            for frame in itertools.islice(video.seek(start), self.n_frames)
+        ])
+
+        return frames
+
+    def __getitem__(self, index):
+        left_gt = self.read_video(self.lefts[index])
+        right = self.read_video(self.rights[index])
 
         crop_params = RandomCrop.get_params(right, output_size=self.crop_size)
         left_gt = torch.stack([crop(frame, *crop_params) for frame in left_gt])
