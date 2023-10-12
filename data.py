@@ -31,13 +31,13 @@ class Dataset(data.Dataset):
         video = VideoReader(str(src), stream="video")
 
         metadata = video.get_metadata()
-        max_seek = metadata["video"]["duration"][0] - (self.n_frames / metadata["video"]["fps"][0])
+        max_start = int(metadata["video"]["duration"][0] * metadata["video"]["fps"][0]) - self.n_frames
 
-        start = random.uniform(0., max_seek)
+        start = random.randint(0, max_start)
 
         frames = torch.stack([
             frame["data"]
-            for frame in itertools.islice(video.seek(start), self.n_frames)
+            for frame in itertools.islice(video, start, start + self.n_frames)
         ])
 
         return frames
@@ -106,5 +106,5 @@ class DataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = DataModule("videos", n_frames=2, crop_size=(400, 960), magnitude=0.3, batch_size=4)
+    datamodule = DataModule("3DMovies", n_frames=2, crop_size=(400, 960), magnitude=0.3, batch_size=3)
     datamodule.plot_example()
