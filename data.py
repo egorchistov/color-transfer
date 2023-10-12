@@ -1,5 +1,5 @@
-import itertools
 import random
+import itertools
 from pathlib import Path
 
 import torch
@@ -27,28 +27,27 @@ class Dataset(data.Dataset):
     def __len__(self):
         return len(self.lefts)
 
-    def read_video(self, src: Path):
+    def read_video(self, src: Path, start=None, crop_params=None):
         video = VideoReader(str(src), stream="video")
 
-        metadata = video.get_metadata()
-        max_start = int(metadata["video"]["duration"][0] * metadata["video"]["fps"][0]) - self.n_frames
+        if start is None:
+            metadata = video.get_metadata()
 
-        start = random.randint(0, max_start)
+            max_start = int(metadata["video"]["duration"][0] * metadata["video"]["fps"][0]) - self.n_frames
+            start = random.randint(0, max_start)
 
-        frames = torch.stack([
-            frame["data"]
-            for frame in itertools.islice(video, start, start + self.n_frames)
-        ])
+        frames = []
+        for frame in itertools.islice(video, start, start + self.n_frames):
+            if crop_params is None:
+                crop_params = RandomCrop.get_params(frame["data"], output_size=self.crop_size)
 
-        return frames
+            frames.append(crop(frame["data"], *crop_params))
+
+        return torch.stack(frames), start, crop_params
 
     def __getitem__(self, index):
-        left_gt = self.read_video(self.lefts[index])
-        right = self.read_video(self.rights[index])
-
-        crop_params = RandomCrop.get_params(right, output_size=self.crop_size)
-        left_gt = torch.stack([crop(frame, *crop_params) for frame in left_gt])
-        right = torch.stack([crop(frame, *crop_params) for frame in right])
+        left_gt, start, crop_params = self.read_video(self.lefts[index])
+        right, _, _ = self.read_video(self.rights[index], start, crop_params)
 
         distortion_params = ColorJitter.get_params(
             brightness=[1 - self.magnitude, 1 + self.magnitude],
