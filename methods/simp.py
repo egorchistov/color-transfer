@@ -173,7 +173,7 @@ class SIMP(pl.LightningModule):
                 "RGB SSIM Error": rgbssim(left_gt, corrected_left),
             }
 
-            self.logger.log_image(key="Validation", images=data.values(), caption=data.keys())
+            self.logger.log_image(key="Validation", images=list(data.values()), caption=list(data.keys()))
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
