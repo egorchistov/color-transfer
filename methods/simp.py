@@ -158,7 +158,7 @@ class SIMP(pl.LightningModule):
                 self.trainer.logged_metrics["PSNR"] > self.max_psnr):
             self.max_psnr = self.trainer.logged_metrics["PSNR"]
 
-            left, left_gt, right = (view[:self.hparams.num_logged_images, 0].unsqueeze(dim=1)
+            left, left_gt, right = (view[:self.hparams.num_logged_images, 0].unsqueeze(dim=1).to(self.device)
                                     for view in next(iter(self.trainer.val_dataloaders)))
 
             corrected_left, _ = self(left, right)
