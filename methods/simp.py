@@ -33,6 +33,7 @@ from segmentation_models_pytorch.encoders import get_encoder
 from methods.gru import ConvGRU
 from methods.modules import CasPAM
 from methods.modules import warp
+from methods.visualizations import chess_mix, rgbmse, rgbssim
 
 
 class SIMP(pl.LightningModule):
@@ -48,6 +49,8 @@ class SIMP(pl.LightningModule):
         self.save_hyperparameters()
 
         assert self.hparams.matcher_skip_idx + len(self.hparams.matcher_layers) == self.hparams.encoder_depth + 1
+
+        self.max_psnr = 0
 
         self.encoder = get_encoder(
             name=self.hparams.encoder_name,
@@ -138,26 +141,39 @@ class SIMP(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         left, left_gt, right = batch
 
-        _, T, _, _, _ = left.shape
-
         corrected_left, _ = self(left, right)
         corrected_left = corrected_left.clamp(0, 1)
 
-        left = left.flatten(end_dim=1)
         left_gt = left_gt.flatten(end_dim=1)
-        right = right.flatten(end_dim=1)
         corrected_left = corrected_left.flatten(end_dim=1)
 
         self.log("PSNR", psnr(corrected_left, left_gt))
         self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
         self.log("FSIM", fsim(corrected_left, left_gt))
 
-        if batch_idx == 0 and hasattr(self.logger, "log_image"):
-            self.logger.log_image(
-                key="Validation",
-                images=[batch[:self.hparams.num_logged_images * T: T]
-                        for batch in [left, corrected_left, left_gt, right]],
-                caption=["Left Distorted", "Left Corrected", "Left", "Right"])
+    def on_validation_epoch_end(self):
+        super().on_validation_epoch_end()
+
+        if (hasattr(self.logger, "log_image") and
+                self.trainer.logged_metrics["PSNR"] > self.max_psnr):
+            self.max_psnr = self.trainer.logged_metrics["PSNR"]
+
+            left, left_gt, right = (view[:self.hparams.num_logged_images, 0].unsqueeze(dim=1)
+                                    for view in next(iter(self.val_dataloader())))
+
+            corrected_left, _ = self(left, right)
+            corrected_left = corrected_left.clamp(0, 1)
+
+            left_gt, corrected_left = (view.flatten(end_dim=1)
+                                       for view in (left_gt, corrected_left))
+
+            data = {
+                "Left Ground Truth/Corrected": chess_mix(left_gt, corrected_left),
+                "RGB MSE Error": rgbmse(left_gt, corrected_left),
+                "RGB SSIM Error": rgbssim(left_gt, corrected_left),
+            }
+
+            self.logger.log_image(key="Validation", images=data.values(), caption=data.keys())
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)

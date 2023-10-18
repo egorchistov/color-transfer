@@ -11,6 +11,8 @@ from torchvision.transforms import ColorJitter, RandomCrop
 from torchvision.transforms.functional import crop
 from pytorch_lightning import LightningDataModule
 
+from methods.visualizations import chess_mix, rgbmse, rgbssim
+
 
 class Dataset(data.Dataset):
     def __init__(self, video_dir, n_frames, crop_size, magnitude):
@@ -91,13 +93,17 @@ class DataModule(LightningDataModule):
             drop_last=False)
 
     def plot_example(self):
-        left, left_gt, right = next(iter(self.train_dataloader()))
-        left, left_gt, right = left.flatten(end_dim=1), left_gt.flatten(end_dim=1), right.flatten(end_dim=1)
+        left, left_gt, right = (view.flatten(end_dim=1)
+                                for view in next(iter(self.train_dataloader())))
 
-        residue = (left - left_gt).abs().clamp(0, 1)
-        grid = make_grid([torch.hstack(column) for column in zip(left, residue, left_gt, right)], nrow=8)
+        grid = make_grid(torch.cat([
+            chess_mix(left, left_gt),
+            rgbmse(left, left_gt),
+            rgbssim(left, left_gt),
+            right
+        ], dim=-1), nrow=1)
 
-        plt.title("left, abs(left - left_gt), left_gt, right")
+        plt.title("Left Ground Truth/Distorted, RGB MSE Error, RGB SSIM Error, Right")
         plt.imshow(grid.permute(1, 2, 0))
         plt.xticks([])
         plt.yticks([])
@@ -105,5 +111,5 @@ class DataModule(LightningDataModule):
 
 
 if __name__ == "__main__":
-    datamodule = DataModule("3DMovies", n_frames=2, crop_size=(400, 960), magnitude=0.3, batch_size=3)
+    datamodule = DataModule("3DMovies", n_frames=1, crop_size=(512, 512), magnitude=0.3, batch_size=7)
     datamodule.plot_example()
