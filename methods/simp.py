@@ -23,7 +23,6 @@ Citation
 
 import torch
 import pytorch_lightning as pl
-from kornia.color import rgb_to_lab
 from kornia.losses import ssim_loss
 from piq import psnr, ssim
 from segmentation_models_pytorch.base import SegmentationHead
@@ -31,6 +30,7 @@ from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 
 from methods.gru import ConvGRU
+from methods.losses import ab_mse_loss
 from methods.modules import CasPAM
 from methods.modules import warp
 from methods.visualizations import chess_mix, rgbssim, abmse
@@ -133,7 +133,7 @@ class SIMP(pl.LightningModule):
         left_gt = left_gt.flatten(end_dim=1)
         corrected_left = corrected_left.flatten(end_dim=1)
 
-        loss_abmse = rgb_to_lab(torch.square(corrected_left - left_gt))[:, (1, 2)].mean()
+        loss_abmse = ab_mse_loss(corrected_left, left_gt)
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
 
         self.log(f"{prefix} AB MSE Loss", loss_abmse)

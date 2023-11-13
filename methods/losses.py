@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+from kornia.color import rgb_to_lab
 
 
 def loss_pam_photometric(img_left, img_right, att, valid_mask):
@@ -44,3 +45,10 @@ def loss_pam_smoothness(att):
         F.l1_loss(att_left2right[:, :, :-1, :-1], att_left2right[:, :, 1:, 1:])
 
     return loss
+
+
+def ab_mse_loss(x, y):
+    x = (rgb_to_lab(x)[:, (1, 2)] + 128) / 255
+    y = (rgb_to_lab(y)[:, (1, 2)] + 128) / 255
+
+    return F.mse_loss(x, y)
