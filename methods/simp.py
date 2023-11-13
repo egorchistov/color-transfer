@@ -24,8 +24,8 @@ Citation
 import torch
 import pytorch_lightning as pl
 from kornia.losses import ssim_loss
-import torch.nn.functional as F
-from piq import psnr, ssim, fsim
+from torch.nn.functional import mse_loss
+from piq import psnr, ssim
 from segmentation_models_pytorch.base import SegmentationHead
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
@@ -50,7 +50,10 @@ class SIMP(pl.LightningModule):
 
         assert self.hparams.matcher_skip_idx + len(self.hparams.matcher_layers) == self.hparams.encoder_depth + 1
 
-        self.max_psnr = 0
+        self.max_psnrs = {
+            "Training": 0,
+            "Validation": 0,
+        }
 
         self.encoder = get_encoder(
             name=self.hparams.encoder_name,
@@ -122,7 +125,7 @@ class SIMP(pl.LightningModule):
 
         return cleft.unflatten(dim=0, sizes=(B, T)), h
 
-    def training_step(self, batch, batch_idx):
+    def unified_step(self, batch, prefix):
         left, left_gt, right = batch
 
         corrected_left, _ = self(left, right)
@@ -130,36 +133,43 @@ class SIMP(pl.LightningModule):
         left_gt = left_gt.flatten(end_dim=1)
         corrected_left = corrected_left.flatten(end_dim=1)
 
-        loss_mse = F.mse_loss(corrected_left, left_gt)
+        loss_mse = mse_loss(corrected_left, left_gt)
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
 
-        self.log("MSE Loss", loss_mse)
-        self.log("SSIM Loss", loss_ssim)
+        self.log(f"{prefix} MSE Loss", loss_mse)
+        self.log(f"{prefix} SSIM Loss", loss_ssim)
+        self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), left_gt))
+        self.log(f"{prefix} SSIM", ssim(corrected_left.clamp(0, 1), left_gt))  # noqa
 
         return loss_mse + loss_ssim
 
+    def training_step(self, batch, batch_idx):
+        return self.unified_step(batch, prefix="Training")
+
     def validation_step(self, batch, batch_idx):
-        left, left_gt, right = batch
+        self.unified_step(batch, prefix="Validation")
 
-        corrected_left, _ = self(left, right)
-        corrected_left = corrected_left.clamp(0, 1)
+    def on_train_epoch_end(self):
+        super().on_train_epoch_end()
 
-        left_gt = left_gt.flatten(end_dim=1)
-        corrected_left = corrected_left.flatten(end_dim=1)
+        batch = next(iter(self.trainer.train_dataloader))
 
-        self.log("PSNR", psnr(corrected_left, left_gt))
-        self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
-        self.log("FSIM", fsim(corrected_left, left_gt))
+        self.log_images(batch, prefix="Training")
 
     def on_validation_epoch_end(self):
         super().on_validation_epoch_end()
 
+        batch = next(iter(self.trainer.val_dataloaders))
+
+        self.log_images(batch, prefix="Validation")
+
+    def log_images(self, batch, prefix):
         if (hasattr(self.logger, "log_image") and
-                self.trainer.logged_metrics["PSNR"] > self.max_psnr):
-            self.max_psnr = self.trainer.logged_metrics["PSNR"]
+                self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
+            self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
 
             left, left_gt, right = (view[:self.hparams.num_logged_images, 0].unsqueeze(dim=1).to(self.device)
-                                    for view in next(iter(self.trainer.val_dataloaders)))
+                                    for view in batch)
 
             corrected_left, _ = self(left, right)
             corrected_left = corrected_left.clamp(0, 1)
@@ -173,7 +183,7 @@ class SIMP(pl.LightningModule):
                 "RGB SSIM Error": rgbssim(left_gt, corrected_left),
             }
 
-            self.logger.log_image(key="Validation", images=list(data.values()), caption=list(data.keys()))
+            self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()))
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
