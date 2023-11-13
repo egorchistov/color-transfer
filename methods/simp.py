@@ -23,8 +23,8 @@ Citation
 
 import torch
 import pytorch_lightning as pl
+from kornia.color import rgb_to_lab
 from kornia.losses import ssim_loss
-from torch.nn.functional import mse_loss
 from piq import psnr, ssim
 from segmentation_models_pytorch.base import SegmentationHead
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
@@ -33,7 +33,7 @@ from segmentation_models_pytorch.encoders import get_encoder
 from methods.gru import ConvGRU
 from methods.modules import CasPAM
 from methods.modules import warp
-from methods.visualizations import chess_mix, rgbmse, rgbssim
+from methods.visualizations import chess_mix, rgbssim, abmse
 
 
 class SIMP(pl.LightningModule):
@@ -133,15 +133,15 @@ class SIMP(pl.LightningModule):
         left_gt = left_gt.flatten(end_dim=1)
         corrected_left = corrected_left.flatten(end_dim=1)
 
-        loss_mse = mse_loss(corrected_left, left_gt)
+        loss_abmse = rgb_to_lab(torch.square(corrected_left - left_gt))[:, (1, 2)].mean()
         loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
 
-        self.log(f"{prefix} MSE Loss", loss_mse)
+        self.log(f"{prefix} AB MSE Loss", loss_abmse)
         self.log(f"{prefix} SSIM Loss", loss_ssim)
         self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), left_gt))
         self.log(f"{prefix} SSIM", ssim(corrected_left.clamp(0, 1), left_gt))  # noqa
 
-        return loss_mse + loss_ssim
+        return loss_abmse + loss_ssim
 
     def training_step(self, batch, batch_idx):
         return self.unified_step(batch, prefix="Training")
@@ -179,7 +179,7 @@ class SIMP(pl.LightningModule):
 
             data = {
                 "Left Ground Truth/Corrected": chess_mix(left_gt, corrected_left),
-                "RGB MSE Error": rgbmse(left_gt, corrected_left),
+                "AB MSE Error": abmse(left_gt, corrected_left),
                 "RGB SSIM Error": rgbssim(left_gt, corrected_left),
             }
 
