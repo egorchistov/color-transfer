@@ -241,17 +241,8 @@ def output(costs):
 
     cost_right2left, cost_left2right = costs
 
-    # masked (lower triangular) softmax(dim=-1)
-    cost_right2left = torch.tril(cost_right2left)
-    cost_right2left = torch.exp(cost_right2left - cost_right2left.max(dim=-1, keepdim=True)[0])
-    cost_right2left = torch.tril(cost_right2left)
-    att_right2left = cost_right2left / (cost_right2left.sum(dim=-1, keepdim=True) + 1e-8)
-
-    # masked (upper triangular) softmax(dim=-1)
-    cost_left2right = torch.triu(cost_left2right)
-    cost_left2right = torch.exp(cost_left2right - cost_left2right.max(dim=-1, keepdim=True)[0])
-    cost_left2right = torch.triu(cost_left2right)
-    att_left2right = cost_left2right / (cost_left2right.sum(dim=-1, keepdim=True) + 1e-8)
+    att_right2left = F.softmax(cost_right2left, dim=-1)
+    att_left2right = F.softmax(cost_left2right, dim=-1)
 
     # valid mask (left image)
     valid_mask_left = torch.sum(att_left2right.detach(), dim=-2) > 0.1
