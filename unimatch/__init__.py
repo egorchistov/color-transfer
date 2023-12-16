@@ -3,8 +3,8 @@ import torch
 import torch.nn.functional as F
 
 from .unimatch import UniMatch
-from .flow_viz import flow_tensor_to_image
 from .geometry import forward_backward_consistency_check
+from utils.flow_viz import flow_tensor_to_image
 
 
 urls: dict[str, str] = {
