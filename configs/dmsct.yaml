@@ -1,0 +1,21 @@
+seed_everything: 42
+model:
+  class_path: methods.dmsct.DMSCT
+  init_args:
+    encoder_name: efficientnet-b2
+    encoder_depth: 4
+    encoder_weights: null
+    decoder_channels: [256, 128, 64, 32]
+    use_gru: false
+    num_logged_images: 3
+data:
+  class_path: utils.data.DataModule
+  init_args:
+    data_dir: Artificial Dataset
+    n_frames: null
+    crop_size: [256, 512]
+    max_magnitude: 0.5
+    batch_size: 16
+    num_workers: 16
+trainer:
+  max_epochs: 100

@@ -1,0 +1,22 @@
+seed_everything: 42
+model:
+  class_path: methods.dcmcs3di.DCMCS3DI
+  init_args:
+    extraction_layers: 18
+    transfer_layers: 6
+    channels: 64
+    num_logged_images: 3
+data:
+  class_path: utils.data.DataModule
+  init_args:
+    data_dir: Artificial Dataset
+    n_frames: 0
+    crop_size: [32, 64]
+    max_magnitude: 0.5
+    batch_size: 3
+    num_workers: 0
+trainer:
+  max_epochs: 1
+  limit_train_batches: 1
+  limit_val_batches: 1
+  log_every_n_steps: 1

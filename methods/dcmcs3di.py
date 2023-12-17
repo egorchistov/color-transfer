@@ -1,8 +1,34 @@
+"""Deep Color Mismatch Correction in Stereoscopic 3D Images
+
+Croci et al. employed a convolutional neural network for color-mismatch
+correction. First, the network extracts features from the input stereopair.
+It then feeds the extracted features into the parallax-attention mechanism,
+which performs stereo matching. Matched features pass through six residual
+blocks to yield the corrected stereoscopic view.
+
+Citation
+--------
+@inproceedings{croci2021deep,
+  title={Deep Color Mismatch Correction In Stereoscopic 3d Images},
+  author={Croci, Simone and Ozcinar, Cagri and Zerman, Emin and Dudek, Roman and Knorr, Sebastian and Smolic, Aljosa},
+  booktitle={2021 IEEE International Conference on Image Processing (ICIP)},
+  pages={1749--1753},
+  year={2021},
+  organization={IEEE}
+}
+"""
+
+
 from __future__ import annotations
+
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
+import pytorch_lightning as pl
+from piq import psnr, ssim, fsim
+from kornia.losses import ssim_loss
 
 
 class BasicBlock(nn.Module):
@@ -38,33 +64,6 @@ class FeatureExtration(nn.Module):
 
     def forward(self, x):
         return self.body(x)
-
-
-class MultiScaleFeatureExtration(nn.Module):
-    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
-        super().__init__()
-
-        self.encoder = nn.Sequential(
-            BasicBlock(3, channels[0]),
-            BasicBlock(channels[0], channels[1], stride=2)
-        )
-
-        for scale in (2, 3, 4, 5):
-            block = nn.Sequential(BasicBlock(channels[scale - 1], channels[scale], stride=2))
-
-            for layer in range(1, layers[scale - 2]):
-                block.append(BasicBlock(channels[scale], channels[scale]))
-
-            self.encoder.append(block)
-
-    def forward(self, x):
-        features = []
-
-        for block in self.encoder:
-            x = block(x)
-            features.append(x)
-
-        return features
 
 
 class PAB(nn.Module):
@@ -116,108 +115,6 @@ class PAB(nn.Module):
         return x_left + fea_left, \
             x_right + fea_right, \
             (cost_right2left, cost_left2right)
-
-
-class PAM(nn.Module):
-    def __init__(self, layers: int, channels: int):
-        super().__init__()
-
-        self.blocks = nn.Sequential()
-        for _ in range(layers):
-            self.blocks.append(PAB(channels))
-
-    def forward(self, fea_left, fea_right, cost):
-        for block in self.blocks:
-            fea_left, fea_right, cost = block(fea_left, fea_right, cost)
-
-        return fea_left, fea_right, cost
-
-
-def upscale_att(atts, scale_factor=2):
-    """Upscale twice matching attention maps using trilinear interpolation
-
-    Parameters
-    ----------
-    atts : pair of two (B, H, W, W) tensors
-        Matching attention maps: att_right2left, att_left2right
-
-    scale_factor: float, default=2
-
-    Returns
-    -------
-    x2atts : pair of two (B, Hx2, Wx2, Wx2) tensors
-        Matching attention maps: att_right2left, att_left2right
-
-    """
-    x2atts = []
-
-    for item in atts:
-        item = item.unsqueeze(dim=1)  # (B, H, W, W) -> (B, 1, H, W, W)
-        item = F.interpolate(item, scale_factor=scale_factor, mode="trilinear", align_corners=False)
-        item = item.squeeze(dim=1)
-        x2atts.append(item)
-
-    return x2atts
-
-
-class CasPAM(nn.Module):
-    def __init__(self, layers: tuple[int, ...], channels: tuple[int, ...]):
-        super().__init__()
-
-        self.stages = nn.Sequential()
-        for stage in range(len(layers)):
-            self.stages.append(PAM(layers[-1 - stage], channels[-1 - stage]))
-
-        self.bottlenecks = nn.Sequential()
-        for stage in range(len(layers) - 1):
-            self.bottlenecks.append(nn.Sequential(
-                nn.Conv2d(channels[-1 - stage] + channels[-2 - stage],
-                          channels[-2 - stage],
-                          kernel_size=1,
-                          padding=0,
-                          bias=True),
-                nn.LeakyReLU(inplace=True)))
-
-    def forward(self, fea_lefts, fea_rights):
-        """Apply parallax attention stages from lesser scale to greater scale
-
-        Parameters
-        ----------
-        fea_lefts : feature list of - for example - scales 1/16, 1/8, 1/4
-        fea_rights : feature list of - for example - scales 1/16, 1/8, 1/4
-
-        Returns
-        -------
-        costs : cost list of - for example - scales 1/16, 1/8, 1/4
-        """
-
-        fea_lefts = fea_lefts[::-1]
-        fea_rights = fea_rights[::-1]
-
-        costs = []
-
-        fea_left, fea_right, cost = self.stages[0](fea_lefts[0], fea_rights[0], cost=(0, 0))
-        costs.append(cost)
-
-        for scale in range(1, len(self.stages)):
-            fea_left = F.interpolate(fea_left, scale_factor=2, mode="bilinear", align_corners=False)
-            fea_right = F.interpolate(fea_right, scale_factor=2, mode="bilinear", align_corners=False)
-            fea_left = self.bottlenecks[scale - 1](torch.cat([fea_left, fea_lefts[scale]], dim=1))
-            fea_right = self.bottlenecks[scale - 1](torch.cat([fea_right, fea_rights[scale]], dim=1))
-
-            cost_up = upscale_att(cost)
-            fea_left, fea_right, cost = self.stages[scale](fea_left, fea_right, cost_up)
-            costs.append(cost)
-
-        atts = []
-        valid_masks = []
-
-        for cost in costs[::-1]:
-            att, _, valid_mask = output(cost)
-            atts.append(att)
-            valid_masks.append(valid_mask)
-
-        return atts, valid_masks
 
 
 def output(costs):
@@ -283,20 +180,6 @@ def warp(image, att):
     return image
 
 
-class Upsample(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, bn=True):
-        super().__init__()
-
-        self.upsample = nn.Sequential(
-            nn.ConvTranspose2d(in_channels, out_channels, kernel_size=3, stride=2, padding=1, output_padding=1, bias=not bn),
-            nn.BatchNorm2d(out_channels) if bn else nn.Identity(),
-            nn.LeakyReLU(inplace=True)
-        )
-
-    def forward(self, x):
-        return self.upsample(x)
-
-
 class Transfer(nn.Module):
     def __init__(self, layers: int, channels: int):
         super().__init__()
@@ -317,40 +200,133 @@ class Transfer(nn.Module):
         return self.body(features)
 
 
-class MultiScaleTransfer(nn.Module):
-    def __init__(self, encoder_channels, n_blocks, use_batchnorm):
+def loss_pam_photometric(img_left, img_right, att, valid_mask):
+    scale = img_left.shape[2] // valid_mask[0].shape[2]
+
+    att_right2left, att_left2right = att
+    valid_mask_left, valid_mask_right = valid_mask
+
+    img_left_scale = F.interpolate(img_left, scale_factor=1 / scale, mode="bilinear", align_corners=False)
+    img_right_scale = F.interpolate(img_right, scale_factor=1 / scale, mode="bilinear", align_corners=False)
+
+    img_right_warp = torch.matmul(att_right2left, img_right_scale.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+    img_left_warp = torch.matmul(att_left2right, img_left_scale.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
+
+    loss = F.l1_loss(img_left_scale * valid_mask_left, img_right_warp * valid_mask_left) + \
+        F.l1_loss(img_right_scale * valid_mask_right, img_left_warp * valid_mask_right)
+
+    return loss
+
+
+def loss_pam_cycle(att_cycle, valid_mask):
+    b, c, h, w = valid_mask[0].shape
+    I = torch.eye(w, w).repeat(b, h, 1, 1).to(att_cycle[0].device)
+
+    att_left2right2left, att_right2left2right = att_cycle
+    valid_mask_left, valid_mask_right = valid_mask
+
+    loss = F.l1_loss(att_left2right2left * valid_mask_left.permute(0, 2, 3, 1),
+                     I * valid_mask_left.permute(0, 2, 3, 1)) + \
+        F.l1_loss(att_right2left2right * valid_mask_right.permute(0, 2, 3, 1),
+                  I * valid_mask_right.permute(0, 2, 3, 1))
+
+    return loss
+
+
+def loss_pam_smoothness(att):
+    att_right2left, att_left2right = att
+
+    loss = F.l1_loss(att_right2left[:, :-1, :, :], att_right2left[:, 1:, :, :]) + \
+        F.l1_loss(att_left2right[:, :-1, :, :], att_left2right[:, 1:, :, :]) + \
+        F.l1_loss(att_right2left[:, :, :-1, :-1], att_right2left[:, :, 1:, 1:]) + \
+        F.l1_loss(att_left2right[:, :, :-1, :-1], att_left2right[:, :, 1:, 1:])
+
+    return loss
+
+
+class DCMCS3DI(pl.LightningModule):
+    def __init__(self,
+                 extraction_layers=18,
+                 transfer_layers=6,
+                 channels=64,
+                 num_logged_images=3):
         super().__init__()
 
-        self.n_blocks = n_blocks
+        self.num_logged_images = num_logged_images
 
-        self.decoder = nn.Sequential()
+        self.extraction = FeatureExtration(layers=extraction_layers, channels=channels)
+        self.pam = PAB(channels=channels, weighted_shortcut=False)
+        self.value = torch.nn.Conv2d(channels, channels, kernel_size=1)
+        self.transfer = Transfer(layers=transfer_layers, channels=channels)
 
-        for i in range(n_blocks):
-            self.decoder.append(
-                BasicBlock(
-                    encoder_channels[-2 - i],
-                    encoder_channels[-2 - i],
-                    bn=use_batchnorm
-                )
-            )
+    def forward(self, left, right):
+        fea_left = self.extraction(left)
+        fea_right = self.extraction(right)
 
-        self.upsample = nn.Sequential()
+        b, _, h, w = fea_left.shape
 
-        for i in range(n_blocks):
-            self.upsample.append(
-                Upsample(
-                    encoder_channels[-1 - i],
-                    encoder_channels[-2 - i],
-                    bn=use_batchnorm
-                )
-            )
+        _, _, cost = self.pam(fea_left, fea_right, cost=(0, 0))
 
-    def forward(self, *features):
-        x = features[-1]
+        att, att_cycle, valid_mask = output(cost)
 
-        for i in range(self.n_blocks):
-            x = self.upsample[i](x)
-            x = x + features[-2 - i]
-            x = self.decoder[i](x)
+        fea_warped_right = warp(fea_right, att[0])
 
-        return x
+        corrected_left = self.transfer(fea_left, fea_warped_right, valid_mask)
+
+        warped_right = warp(right, att[0])
+
+        return corrected_left, (
+            att,
+            att_cycle,
+            valid_mask,
+            warped_right
+        )
+
+    def training_step(self, batch, batch_idx):
+        left, left_gt, right = batch
+
+        corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
+
+        loss_l1 = F.l1_loss(corrected_left, left_gt)
+        loss_mse = F.mse_loss(corrected_left, left_gt)
+        loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
+
+        loss_pm = 0.005 * loss_pam_photometric(left, right, att, valid_mask)
+        loss_cycle = 0.005 * loss_pam_cycle(att_cycle, valid_mask)
+        loss_smooth = 0.0005 * loss_pam_smoothness(att)
+
+        loss = loss_l1 + loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
+
+        self.log("L1 Loss", loss_l1)
+        self.log("MSE Loss", loss_mse)
+        self.log("SSIM Loss", loss_ssim)
+
+        self.log("Photometric Loss", loss_pm)
+        self.log("Cycle Loss",  loss_cycle)
+        self.log("Smoothness Loss",  loss_smooth)
+
+        self.log("Loss", loss)
+
+        return loss
+
+    def validation_step(self, batch, batch_idx):
+        left, left_gt, right = batch
+
+        corrected_left, (_, _, _, warped_right) = self(left, right)
+        corrected_left = corrected_left.clamp(0, 1)
+
+        self.log("PSNR", psnr(corrected_left, left_gt))
+        self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
+        self.log("FSIM", fsim(corrected_left, left_gt))
+
+        if batch_idx == 0 and hasattr(self.logger, "log_image"):
+            self.logger.log_image(
+                key="Validation",
+                images=[batch[:self.num_logged_images]
+                        for batch in [left, warped_right, corrected_left, left_gt, right]],
+                caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
+
+        return {"optimizer": optimizer}
