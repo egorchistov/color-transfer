@@ -19,3 +19,14 @@ data:
     num_workers: 16
 trainer:
   max_epochs: 100
+  logger:
+      class_path: pytorch_lightning.loggers.WandbLogger
+      init_args:
+        project: color-transfer
+        log_model: true
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: PSNR
+        mode: max
+    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
