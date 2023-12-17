@@ -128,7 +128,14 @@ class DMSCT(pl.LightningModule):
         padding_factor = 32
         inference_size = [int(np.ceil(left.shape[-2] / padding_factor)) * padding_factor,
                           int(np.ceil(left.shape[-1] / padding_factor)) * padding_factor]
-        max_inference_size = (544, 960)
+
+        aspect_ratio = left.shape[-1] / left.shape[-2]
+
+        max_h = np.floor(np.sqrt(544 * 960 / aspect_ratio))
+        max_w = np.floor(max_h * aspect_ratio)
+
+        max_inference_size = [int(np.ceil(max_h / padding_factor)) * padding_factor,
+                              int(np.ceil(max_w / padding_factor)) * padding_factor]
 
         if inference_size[0] * inference_size[1] > max_inference_size[0] * max_inference_size[1]:
             inference_size = max_inference_size
