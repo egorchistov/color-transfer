@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 import pytorch_lightning as pl
 from kornia.losses import ssim_loss
@@ -126,8 +127,17 @@ class DMSCT(pl.LightningModule):
         features_left = feature0
         features_right = feature1
 
-        out = self.gmflow(torch.nn.functional.interpolate(left * 255, scale_factor=0.5),
-                          torch.nn.functional.interpolate(right * 255, scale_factor=0.5),
+        padding_factor = 32
+        inference_size = [int(np.ceil(left.shape[-2] / padding_factor)) * padding_factor,
+                          int(np.ceil(left.shape[-1] / padding_factor)) * padding_factor]
+        max_inference_size = (544, 960)
+
+        if inference_size[0] * inference_size[1] > max_inference_size[0] * max_inference_size[1]:
+            inference_size = max_inference_size
+
+        out = self.gmflow(left * 255,
+                          right * 255,
+                          inference_size=inference_size,
                           pred_bidir_flow=True,
                           fwd_bwd_consistency_check=True,
                           )
