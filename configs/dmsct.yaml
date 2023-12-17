@@ -27,6 +27,6 @@ trainer:
   callbacks:
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:
-        monitor: PSNR
+        monitor: Validation PSNR
         mode: max
     - class_path: pytorch_lightning.callbacks.LearningRateMonitor
