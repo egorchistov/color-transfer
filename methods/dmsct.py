@@ -244,7 +244,7 @@ class DMSCT(pl.LightningModule):
                               fwd_bwd_consistency_check=True,
                               )
 
-            flow_viz = torch.from_numpy(out["flow_viz"])
+            flow_viz = torch.from_numpy(out["flow_viz"]) / 255
             warped_right = flow_warp(right, out["flow"]) * (1 - out["fwd_occ"])
 
             data = {
