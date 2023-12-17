@@ -78,6 +78,8 @@ class DMSCT(pl.LightningModule):
         )
 
         self.gmflow = GMFlow(pretrained="mixdata")
+        for p in self.gmflow.parameters():
+            p.requires_grad = False
 
         encoder_out_channels = list(self.encoder.out_channels)
         encoder_out_channels = [
