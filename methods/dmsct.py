@@ -131,7 +131,7 @@ class DMSCT(pl.LightningModule):
 
         aspect_ratio = left.shape[-1] / left.shape[-2]
 
-        max_h = np.floor(np.sqrt(544 * 960 / aspect_ratio))
+        max_h = np.floor(np.sqrt(500 * 900 / aspect_ratio))
         max_w = np.floor(max_h * aspect_ratio)
 
         max_inference_size = [int(np.ceil(max_h / padding_factor)) * padding_factor,
