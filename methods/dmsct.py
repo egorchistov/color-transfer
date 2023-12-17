@@ -9,7 +9,7 @@ from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 
 from utils.visualizations import chess_mix, rgbmse, rgbssim
-from unimatch import GMFlow, default_cfg
+from unimatch import GMFlow
 from unimatch.geometry import flow_warp
 
 
@@ -77,9 +77,7 @@ class DMSCT(pl.LightningModule):
             weights=self.hparams.encoder_weights,
         )
 
-        self.gmflow = GMFlow(pretrained="mixdata", config=default_cfg.update({
-            "upsample_factor": 8,  # Default upsample_factor=4 is too resource intensive
-        }))
+        self.gmflow = GMFlow(pretrained="mixdata")
 
         encoder_out_channels = list(self.encoder.out_channels)
         encoder_out_channels = [
