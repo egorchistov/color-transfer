@@ -252,11 +252,11 @@ class DMSCT(pl.LightningModule):
                 "RGB MSE Error": rgbmse(left_gt, corrected_left),
                 "RGB SSIM Error": rgbssim(left_gt, corrected_left),
                 "Optical Flow": flow_viz,
+                "Warped Right": warped_right,
             }
 
-            self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()))
-            self.logger.log_image(key=f"{prefix} Images", images=[warped_right], caption=["Warped Right"],
-                                  masks=[{"Occlusions": {"mask_data": occlusion_mask}}])
+            self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()),
+                                  masks=[None] * (len(data) - 1) + [{"Occlusions": {"mask_data": occlusion_mask, "class_labels": {255: "Occlusions"}}}])
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
