@@ -229,7 +229,7 @@ class DMSCT(pl.LightningModule):
                 self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
             self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
 
-            left, left_gt, right = (view[0].unsqueeze(dim=0) for view in batch)
+            left, left_gt, right = (view[0].unsqueeze(dim=0).to(self.device) for view in batch)
 
             if left.ndim == 5:
                 left, left_gt, right = (view[:, 0] for view in (left, left_gt, right))
