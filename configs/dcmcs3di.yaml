@@ -9,13 +9,20 @@ data:
   class_path: utils.data.DataModule
   init_args:
     data_dir: Artificial Dataset
-    n_frames: 0
-    crop_size: [32, 64]
+    n_frames: null
+    crop_size: [128, 256]
     max_magnitude: 0.5
-    batch_size: 3
-    num_workers: 0
+    batch_size: 8
+    num_workers: 8
 trainer:
-  max_epochs: 1
-  limit_train_batches: 1
-  limit_val_batches: 1
-  log_every_n_steps: 1
+  max_epochs: 100
+  logger:
+      class_path: pytorch_lightning.loggers.WandbLogger
+      init_args:
+        project: color-transfer
+        log_model: true
+  callbacks:
+    - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: Validation PSNR
+        mode: max

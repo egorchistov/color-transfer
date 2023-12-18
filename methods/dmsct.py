@@ -69,6 +69,7 @@ class DMSCT(pl.LightningModule):
         self.max_psnrs = {
             "Training": 0,
             "Validation": 0,
+            "Test": 0,
         }
 
         self.encoder = get_encoder(
@@ -227,10 +228,10 @@ class DMSCT(pl.LightningModule):
                 self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
             self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
 
-            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items()}
+            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
 
             if batch["gt"].ndim == 5:
-                batch = {k: v[:, 0] for k, v in batch.items()}
+                batch = {k: v[:, 0] for k, v in batch.items() if isinstance(v, torch.Tensor)}
 
             result, _ = self(batch["target"], batch["reference"])
             result = result.clamp(0, 1)

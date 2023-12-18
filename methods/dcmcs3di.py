@@ -27,8 +27,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import pytorch_lightning as pl
-from piq import psnr, ssim, fsim
+from piq import psnr, ssim
 from kornia.losses import ssim_loss
+
+from utils.visualizations import chess_mix, rgbmse, rgbssim
 
 
 class BasicBlock(nn.Module):
@@ -244,15 +246,61 @@ def loss_pam_smoothness(att):
     return loss
 
 
+def regress_disp(att, valid_mask):
+    '''
+    :param att:         B * H * W * W
+    :param valid_mask:  B * 1 * H * W
+    '''
+    b, h, w, _ = att.shape
+    index = torch.arange(w).view(1, 1, 1, w).to(att.device).float()    # index: 1*1*1*w
+    disp_ini = index - torch.sum(att * index, dim=-1).view(b, 1, h, w)
+
+    # partial conv
+    filter1 = torch.zeros(1, 3).to(att.device)
+    filter1[0, 0] = 1
+    filter1[0, 1] = 1
+    filter1 = filter1.view(1, 1, 1, 3)
+
+    filter2 = torch.zeros(1, 3).to(att.device)
+    filter2[0, 1] = 1
+    filter2[0, 2] = 1
+    filter2 = filter2.view(1, 1, 1, 3)
+
+    valid_mask_0 = valid_mask
+    disp = disp_ini * valid_mask_0
+
+    valid_mask_num = 1
+    while valid_mask_num > 0:
+        valid_mask_1 = F.conv2d(valid_mask_0, filter1, padding=[0, 1])
+        disp = disp * valid_mask_0 + \
+               F.conv2d(disp, filter1, padding=[0, 1]) / (valid_mask_1 + 1e-4) * ((valid_mask_1 > 0).float() - valid_mask_0)
+        valid_mask_num = (valid_mask_1 > 0).float().sum() - valid_mask_0.sum()
+        valid_mask_0 = (valid_mask_1 > 0).float()
+
+    valid_mask_num = 1
+    while valid_mask_num > 0:
+        valid_mask_1 = F.conv2d(valid_mask_0, filter2, padding=[0, 1])
+        disp = disp * valid_mask_0 + \
+               F.conv2d(disp, filter2, padding=[0, 1]) / (valid_mask_1 + 1e-4) * ((valid_mask_1 > 0).float() - valid_mask_0)
+        valid_mask_num = (valid_mask_1 > 0).float().sum() - valid_mask_0.sum()
+        valid_mask_0 = (valid_mask_1 > 0).float()
+
+    return disp_ini * valid_mask + disp * (1 - valid_mask)
+
+
 class DCMCS3DI(pl.LightningModule):
     def __init__(self,
                  extraction_layers=18,
                  transfer_layers=6,
                  channels=64,
-                 num_logged_images=3):
+                 ):
         super().__init__()
 
-        self.num_logged_images = num_logged_images
+        self.max_psnrs = {
+            "Training": 0,
+            "Validation": 0,
+            "Test": 0,
+        }
 
         self.extraction = FeatureExtration(layers=extraction_layers, channels=channels)
         self.pam = PAB(channels=channels, weighted_shortcut=False)
@@ -282,7 +330,7 @@ class DCMCS3DI(pl.LightningModule):
             warped_right
         )
 
-    def training_step(self, batch, batch_idx):
+    def step(self, batch, prefix):
         corrected_left, (att, att_cycle, valid_mask, _) = self(batch["target"], batch["reference"])
 
         loss_l1 = F.l1_loss(corrected_left, batch["gt"])
@@ -293,34 +341,75 @@ class DCMCS3DI(pl.LightningModule):
         loss_cycle = 0.005 * loss_pam_cycle(att_cycle, valid_mask)
         loss_smooth = 0.0005 * loss_pam_smoothness(att)
 
-        loss = loss_l1 + loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
+        self.log(f"{prefix} L1 Loss", loss_l1)
+        self.log(f"{prefix} MSE Loss", loss_mse)
+        self.log(f"{prefix} SSIM Loss", loss_ssim)
 
-        self.log("L1 Loss", loss_l1)
-        self.log("MSE Loss", loss_mse)
-        self.log("SSIM Loss", loss_ssim)
+        self.log(f"{prefix} Photometric Loss", loss_pm)
+        self.log(f"{prefix} Cycle Loss",  loss_cycle)
+        self.log(f"{prefix} Smoothness Loss",  loss_smooth)
 
-        self.log("Photometric Loss", loss_pm)
-        self.log("Cycle Loss",  loss_cycle)
-        self.log("Smoothness Loss",  loss_smooth)
+        self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), batch["gt"]))
+        self.log(f"{prefix} SSIM", ssim(corrected_left.clamp(0, 1), batch["gt"]))  # noqa
 
-        self.log("Loss", loss)
+        return loss_l1 + loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
 
-        return loss
+    def training_step(self, batch, batch_idx):
+        return self.step(batch, prefix="Training")
 
     def validation_step(self, batch, batch_idx):
-        corrected_left, (_, _, _, warped_right) = self(batch["target"], batch["reference"])
-        corrected_left = corrected_left.clamp(0, 1)
+        self.step(batch, prefix="Validation")
 
-        self.log("PSNR", psnr(corrected_left, batch["gt"]))
-        self.log("SSIM", ssim(corrected_left, batch["gt"]))  # noqa
-        self.log("FSIM", fsim(corrected_left, batch["gt"]))
+    def test_step(self, batch, batch_idx):
+        self.step(batch, prefix="Test")
 
-        if batch_idx == 0 and hasattr(self.logger, "log_image"):
-            self.logger.log_image(
-                key="Validation",
-                images=[batch[:self.num_logged_images]
-                        for batch in [batch["target"], warped_right, corrected_left, batch["gt"], batch["reference"]]],
-                caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
+    def on_train_epoch_end(self):
+        super().on_train_epoch_end()
+
+        batch = next(iter(self.trainer.train_dataloader))
+
+        self.log_images(batch, prefix="Training")
+
+    def on_validation_epoch_end(self):
+        super().on_validation_epoch_end()
+
+        batch = next(iter(self.trainer.val_dataloaders))
+
+        self.log_images(batch, prefix="Validation")
+
+    def on_test_epoch_end(self):
+        super().on_test_epoch_end()
+
+        batch = next(iter(self.trainer.test_dataloaders))
+
+        self.log_images(batch, prefix="Test")
+
+    def log_images(self, batch, prefix):
+        if (hasattr(self.logger, "log_image") and
+                self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
+            self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
+
+            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
+
+            if batch["gt"].ndim == 5:
+                batch = {k: v[:, 0] for k, v in batch.items() if isinstance(v, torch.Tensor)}
+
+            result, (att, _, valid_mask, warped_right) = self(batch["target"], batch["reference"])
+            result = result.clamp(0, 1)
+
+            disparity = regress_disp(att[0], valid_mask[0])
+            occlusion_mask = (1 - valid_mask[0]).squeeze().cpu().numpy() * 255
+
+            data = {
+                "Left Ground Truth/Corrected": chess_mix(batch["gt"], result),
+                "RGB MSE Error": rgbmse(batch["gt"], result),
+                "RGB SSIM Error": rgbssim(batch["gt"], result),
+                "Disparity": disparity,
+                "Warped Right": warped_right,
+            }
+
+            self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()),
+                                  masks=[None] * (len(data) - 1) + [{"Occlusions": {"mask_data": occlusion_mask, "class_labels": {255: "Occlusions"}}}])
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)

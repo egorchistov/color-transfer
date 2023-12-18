@@ -33,7 +33,7 @@ class ImageDataset(data.Dataset):
 
         self.crop_size = crop_size
 
-        self.distortion_fns = list(distortions(max_magnitude).values())
+        self.distortion_names, self.distortion_fns = zip(*distortions(max_magnitude).items())
 
     def __len__(self):
         return len(self.lefts)
@@ -49,10 +49,16 @@ class ImageDataset(data.Dataset):
         left = ImageDataset.read_image(self.lefts[index], self.crop_size)
         right = ImageDataset.read_image(self.rights[index], self.crop_size)
 
+        distortion_name = self.distortion_names[index % len(self.distortion_names)]
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
         left_distorted = distortion_fn(left)
 
-        return {"target": left_distorted / 255, "reference": right / 255, "gt": left / 255}
+        return {
+            "target": left_distorted / 255,
+            "reference": right / 255,
+            "gt": left / 255,
+            "distortion_name": distortion_name,
+        }
 
 
 class VideoDataset(data.Dataset):
@@ -65,7 +71,7 @@ class VideoDataset(data.Dataset):
         self.n_frames = n_frames
         self.crop_size = crop_size
 
-        self.distortion_fns = list(distortions(max_magnitude).values())
+        self.distortion_names, self.distortion_fns = zip(*distortions(max_magnitude).items())
 
     def __len__(self):
         return len(self.lefts)
@@ -85,10 +91,16 @@ class VideoDataset(data.Dataset):
         left = VideoDataset.read_video(self.lefts[index], self.n_frames, self.crop_size)
         right = VideoDataset.read_video(self.rights[index], self.n_frames, self.crop_size)
 
+        distortion_name = self.distortion_names[index % len(self.distortion_names)]
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
         left_distorted = torch.stack([distortion_fn(frame) for frame in left])
 
-        return {"target": left_distorted / 255, "reference": right / 255, "gt": left / 255}
+        return {
+            "target": left_distorted / 255,
+            "reference": right / 255,
+            "gt": left / 255,
+            "distortion_name": distortion_name,
+        }
 
 
 class DataModule(LightningDataModule):
