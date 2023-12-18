@@ -245,6 +245,7 @@ class DMSCT(pl.LightningModule):
 
             flow_viz = torch.from_numpy(out["flow_viz"]) / 255
             warped_right = flow_warp(right, out["flow"])
+            occlusion_mask = out["fwd_occ"].squeeze()
 
             data = {
                 "Left Ground Truth/Corrected": chess_mix(left_gt, corrected_left),
@@ -255,7 +256,7 @@ class DMSCT(pl.LightningModule):
 
             self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()))
             self.logger.log_image(key=f"{prefix} Images", images=[warped_right], caption=["Warped Right"],
-                                  masks=[{"Occlusions": {"mask_data": out["fwd_occ"].cpu()}}])
+                                  masks=[{"Occlusions": {"mask_data": occlusion_mask.cpu()}}])
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
