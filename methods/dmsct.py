@@ -176,21 +176,19 @@ class DMSCT(pl.LightningModule):
         return left + cleft, h
 
     def step(self, batch, prefix):
-        left, left_gt, right = batch
+        result, _ = self(batch["target"], batch["reference"])
 
-        corrected_left, _ = self(left, right)
+        if batch["gt"].ndim == 5:
+            batch["gt"] = batch["gt"].flatten(end_dim=1)
+            result = result.flatten(end_dim=1)
 
-        if left.ndim == 5:
-            left_gt = left_gt.flatten(end_dim=1)
-            corrected_left = corrected_left.flatten(end_dim=1)
-
-        loss_mse = mse_loss(corrected_left, left_gt)
-        loss_ssim = 0.1 * ssim_loss(corrected_left, left_gt, window_size=11)
+        loss_mse = mse_loss(result, batch["gt"])
+        loss_ssim = 0.1 * ssim_loss(result, batch["gt"], window_size=11)
 
         self.log(f"{prefix} MSE Loss", loss_mse)
         self.log(f"{prefix} SSIM Loss", loss_ssim)
-        self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), left_gt), prog_bar=True)
-        self.log(f"{prefix} SSIM", ssim(corrected_left.clamp(0, 1), left_gt))  # noqa
+        self.log(f"{prefix} PSNR", psnr(result.clamp(0, 1), batch["gt"]), prog_bar=True)
+        self.log(f"{prefix} SSIM", ssim(result.clamp(0, 1), batch["gt"]))  # noqa
 
         return loss_mse + loss_ssim
 
@@ -229,28 +227,28 @@ class DMSCT(pl.LightningModule):
                 self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
             self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
 
-            left, left_gt, right = (view[-1].unsqueeze(dim=0).to(self.device) for view in batch)
+            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items()}
 
-            if left.ndim == 5:
-                left, left_gt, right = (view[:, 0] for view in (left, left_gt, right))
+            if batch["gt"].ndim == 5:
+                batch = {k: v[:, 0] for k, v in batch.items()}
 
-            corrected_left, _ = self(left, right)
-            corrected_left = corrected_left.clamp(0, 1)
+            result, _ = self(batch["target"], batch["reference"])
+            result = result.clamp(0, 1)
 
-            out = self.gmflow(left * 255, right * 255,
+            out = self.gmflow(batch["target"] * 255, batch["reference"] * 255,
                               pred_bidir_flow=True,
                               pred_flow_viz=True,
                               fwd_bwd_consistency_check=True,
                               )
 
             flow_viz = torch.from_numpy(out["flow_viz"]) / 255
-            warped_right = flow_warp(right, out["flow"])
+            warped_right = flow_warp(batch["reference"], out["flow"])
             occlusion_mask = out["fwd_occ"].squeeze().cpu().numpy() * 255
 
             data = {
-                "Left Ground Truth/Corrected": chess_mix(left_gt, corrected_left),
-                "RGB MSE Error": rgbmse(left_gt, corrected_left),
-                "RGB SSIM Error": rgbssim(left_gt, corrected_left),
+                "Left Ground Truth/Corrected": chess_mix(batch["gt"], result),
+                "RGB MSE Error": rgbmse(batch["gt"], result),
+                "RGB SSIM Error": rgbssim(batch["gt"], result),
                 "Optical Flow": flow_viz,
                 "Warped Right": warped_right,
             }

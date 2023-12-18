@@ -52,7 +52,7 @@ class ImageDataset(data.Dataset):
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
         left_distorted = distortion_fn(left)
 
-        return left_distorted / 255, left / 255, right / 255
+        return {"target": left_distorted / 255, "reference": right / 255, "gt": left / 255}
 
 
 class VideoDataset(data.Dataset):
@@ -88,7 +88,7 @@ class VideoDataset(data.Dataset):
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
         left_distorted = torch.stack([distortion_fn(frame) for frame in left])
 
-        return left_distorted / 255, left / 255, right / 255
+        return {"target": left_distorted / 255, "reference": right / 255, "gt": left / 255}
 
 
 class DataModule(LightningDataModule):

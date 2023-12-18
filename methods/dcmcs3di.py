@@ -283,15 +283,13 @@ class DCMCS3DI(pl.LightningModule):
         )
 
     def training_step(self, batch, batch_idx):
-        left, left_gt, right = batch
+        corrected_left, (att, att_cycle, valid_mask, _) = self(batch["target"], batch["reference"])
 
-        corrected_left, (att, att_cycle, valid_mask, _) = self(left, right)
+        loss_l1 = F.l1_loss(corrected_left, batch["gt"])
+        loss_mse = F.mse_loss(corrected_left, batch["gt"])
+        loss_ssim = ssim_loss(corrected_left, batch["gt"], window_size=11)
 
-        loss_l1 = F.l1_loss(corrected_left, left_gt)
-        loss_mse = F.mse_loss(corrected_left, left_gt)
-        loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
-
-        loss_pm = 0.005 * loss_pam_photometric(left, right, att, valid_mask)
+        loss_pm = 0.005 * loss_pam_photometric(batch["target"], batch["reference"], att, valid_mask)
         loss_cycle = 0.005 * loss_pam_cycle(att_cycle, valid_mask)
         loss_smooth = 0.0005 * loss_pam_smoothness(att)
 
@@ -310,20 +308,18 @@ class DCMCS3DI(pl.LightningModule):
         return loss
 
     def validation_step(self, batch, batch_idx):
-        left, left_gt, right = batch
-
-        corrected_left, (_, _, _, warped_right) = self(left, right)
+        corrected_left, (_, _, _, warped_right) = self(batch["target"], batch["reference"])
         corrected_left = corrected_left.clamp(0, 1)
 
-        self.log("PSNR", psnr(corrected_left, left_gt))
-        self.log("SSIM", ssim(corrected_left, left_gt))  # noqa
-        self.log("FSIM", fsim(corrected_left, left_gt))
+        self.log("PSNR", psnr(corrected_left, batch["gt"]))
+        self.log("SSIM", ssim(corrected_left, batch["gt"]))  # noqa
+        self.log("FSIM", fsim(corrected_left, batch["gt"]))
 
         if batch_idx == 0 and hasattr(self.logger, "log_image"):
             self.logger.log_image(
                 key="Validation",
                 images=[batch[:self.num_logged_images]
-                        for batch in [left, warped_right, corrected_left, left_gt, right]],
+                        for batch in [batch["target"], warped_right, corrected_left, batch["gt"], batch["reference"]]],
                 caption=["Left Distorted", "Warped Right", "Left Corrected", "Left", "Right"])
 
     def configure_optimizers(self):
