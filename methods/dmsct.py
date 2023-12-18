@@ -255,7 +255,7 @@ class DMSCT(pl.LightningModule):
 
             self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()))
             self.logger.log_image(key=f"{prefix} Images", images=[warped_right], caption=["Warped Right"],
-                                  masks={"Occlusions": {"mask_data": out["fwd_occ"]}})
+                                  masks=[{"Occlusions": {"mask_data": out["fwd_occ"]}}])
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
