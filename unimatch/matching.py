@@ -65,7 +65,7 @@ def local_correlation_softmax(feature0, feature1, local_radius,
 
     # normalize coordinates to [-1, 1]
     sample_coords_norm = normalize_coords(sample_coords, h, w)  # [-1, 1]
-    window_feature = F.grid_sample(feature1.contiguous(), sample_coords_norm,
+    window_feature = F.grid_sample(feature1, sample_coords_norm,
                                    padding_mode=padding_mode, align_corners=True
                                    ).permute(0, 2, 1, 3)  # [B, H*W, C, (2R+1)^2]
     feature0_view = feature0.permute(0, 2, 3, 1).view(b, h * w, 1, c)  # [B, H*W, 1, C]

@@ -62,7 +62,7 @@ class DMSCT(pl.LightningModule):
                  encoder_weights=None,
                  decoder_channels=(256, 128, 64, 32),
                  use_gru=False,
-                 num_logged_images=3):
+                 ):
         super().__init__()
         self.save_hyperparameters()
 
@@ -185,7 +185,7 @@ class DMSCT(pl.LightningModule):
             corrected_left = corrected_left.flatten(end_dim=1)
 
         loss_mse = mse_loss(corrected_left, left_gt)
-        loss_ssim = ssim_loss(corrected_left, left_gt, window_size=11)
+        loss_ssim = 0.1 * ssim_loss(corrected_left, left_gt, window_size=11)
 
         self.log(f"{prefix} MSE Loss", loss_mse)
         self.log(f"{prefix} SSIM Loss", loss_ssim)
@@ -229,8 +229,7 @@ class DMSCT(pl.LightningModule):
                 self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
             self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
 
-            left, left_gt, right = (view[:self.hparams.num_logged_images].to(self.device)
-                                    for view in batch)
+            left, left_gt, right = (view[0].unsquueze(dim=0) for view in batch)
 
             if left.ndim == 5:
                 left, left_gt, right = (view[:, 0] for view in (left, left_gt, right))
@@ -252,10 +251,11 @@ class DMSCT(pl.LightningModule):
                 "RGB MSE Error": rgbmse(left_gt, corrected_left),
                 "RGB SSIM Error": rgbssim(left_gt, corrected_left),
                 "Optical Flow": flow_viz,
-                "Warped Right": warped_right,
             }
 
             self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()))
+            self.logger.log_image(key=f"{prefix} Images", images=[warped_right], caption=["Warped Right"],
+                                  masks={"Occlusions": {"mask_data": out["fwd_occ"]}})
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)

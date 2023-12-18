@@ -5,7 +5,6 @@ model:
     extraction_layers: 18
     transfer_layers: 6
     channels: 64
-    num_logged_images: 3
 data:
   class_path: utils.data.DataModule
   init_args:

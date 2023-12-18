@@ -7,7 +7,6 @@ model:
     encoder_weights: null
     decoder_channels: [256, 128, 64, 32]
     use_gru: false
-    num_logged_images: 1
 data:
   class_path: utils.data.DataModule
   init_args:
@@ -15,8 +14,8 @@ data:
     n_frames: null
     crop_size: [256, 512]
     max_magnitude: 0.5
-    batch_size: 16
-    num_workers: 16
+    batch_size: 8
+    num_workers: 8
 trainer:
   max_epochs: 100
   logger:
@@ -29,4 +28,3 @@ trainer:
       init_args:
         monitor: Validation PSNR
         mode: max
-    - class_path: pytorch_lightning.callbacks.LearningRateMonitor
