@@ -397,7 +397,7 @@ class DCMCS3DI(pl.LightningModule):
             result, (att, _, valid_mask, warped_right) = self(batch["target"], batch["reference"])
             result = result.clamp(0, 1)
 
-            disparity = regress_disp(att[0], valid_mask[0])
+            disparity = regress_disp(att[0], valid_mask[0].float())
             occlusion_mask = (1 - valid_mask[0]).squeeze().cpu().numpy() * 255
 
             data = {
