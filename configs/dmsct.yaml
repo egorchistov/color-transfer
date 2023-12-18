@@ -7,7 +7,7 @@ model:
     encoder_weights: null
     decoder_channels: [256, 128, 64, 32]
     use_gru: false
-    num_logged_images: 3
+    num_logged_images: 1
 data:
   class_path: utils.data.DataModule
   init_args:

@@ -173,7 +173,7 @@ class DMSCT(pl.LightningModule):
         if is_video:
             cleft = cleft.unflatten(dim=0, sizes=(B, T))
 
-        return cleft, h
+        return left + cleft, h
 
     def step(self, batch, prefix):
         left, left_gt, right = batch
@@ -189,7 +189,7 @@ class DMSCT(pl.LightningModule):
 
         self.log(f"{prefix} MSE Loss", loss_mse)
         self.log(f"{prefix} SSIM Loss", loss_ssim)
-        self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), left_gt))
+        self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), left_gt), prog_bar=prefix == "Training")
         self.log(f"{prefix} SSIM", ssim(corrected_left.clamp(0, 1), left_gt))  # noqa
 
         return loss_mse + loss_ssim
@@ -245,7 +245,7 @@ class DMSCT(pl.LightningModule):
                               )
 
             flow_viz = torch.from_numpy(out["flow_viz"]) / 255
-            warped_right = flow_warp(right, out["flow"]) * (1 - out["fwd_occ"])
+            warped_right = flow_warp(right, out["flow"])
 
             data = {
                 "Left Ground Truth/Corrected": chess_mix(left_gt, corrected_left),
