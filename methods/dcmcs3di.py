@@ -398,7 +398,7 @@ class DCMCS3DI(pl.LightningModule):
             result = result.clamp(0, 1)
 
             disparity = regress_disp(att[0], valid_mask[0].float())
-            occlusion_mask = (1 - valid_mask[0]).squeeze().cpu().numpy() * 255
+            occlusion_mask = (1 - valid_mask[0].float()).squeeze().cpu().numpy() * 255
 
             data = {
                 "Left Ground Truth/Corrected": chess_mix(batch["gt"], result),
