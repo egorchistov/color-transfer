@@ -189,7 +189,7 @@ class DMSCT(pl.LightningModule):
 
         self.log(f"{prefix} MSE Loss", loss_mse)
         self.log(f"{prefix} SSIM Loss", loss_ssim)
-        self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), left_gt), prog_bar=prefix == "Training")
+        self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), left_gt), prog_bar=True)
         self.log(f"{prefix} SSIM", ssim(corrected_left.clamp(0, 1), left_gt))  # noqa
 
         return loss_mse + loss_ssim
