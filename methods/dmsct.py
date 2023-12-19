@@ -143,12 +143,13 @@ class DMSCT(pl.LightningModule):
         if inference_size[0] * inference_size[1] > max_inference_size[0] * max_inference_size[1]:
             inference_size = max_inference_size
 
-        out = self.gmflow(left * 255,
-                          right * 255,
-                          inference_size=inference_size,
-                          pred_bidir_flow=True,
-                          fwd_bwd_consistency_check=True,
-                          )
+        with torch.no_grad():
+            out = self.gmflow(left * 255,
+                              right * 255,
+                              inference_size=inference_size,
+                              pred_bidir_flow=True,
+                              fwd_bwd_consistency_check=True,
+                              )
 
         features = [
             torch.cat([
