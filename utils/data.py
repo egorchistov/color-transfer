@@ -59,7 +59,7 @@ class TestDataset(PairDataset):
     def __getitem__(self, index):
         return_dict = super().__getitem__(index // len(self.distortion_fns))
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
-        return_dict["target"] = distortion_fn((return_dict["gt"] * 255).long()) / 255
+        return_dict["target"] = distortion_fn(return_dict["gt"])
 
         return return_dict
 

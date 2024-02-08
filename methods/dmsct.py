@@ -58,9 +58,7 @@ class DeepColorTransfer(torch.nn.Module):
 
         return batch
 
-    def forward(self, batch):
-        batch = DeepColorTransfer.match_reference(batch)
-
+    def run_transfer(self, batch):
         features = torch.cat([
             batch["target"],
             batch["matched_reference"],
@@ -68,6 +66,12 @@ class DeepColorTransfer(torch.nn.Module):
         ], dim=1)
 
         return batch["target"] + self.transfer(features)
+
+    def forward(self, batch):
+        batch = self.match_reference(batch)
+        result = self.run_transfer(batch)
+
+        return result
 
 
 class TrainDeepColorTransfer(pl.LightningModule):
@@ -77,19 +81,17 @@ class TrainDeepColorTransfer(pl.LightningModule):
         self.patch_shape = patch_shape
 
         self.model = DeepColorTransfer()
-        self.distort = ColorJitter(0.5, 0.5, 0.5, 0.5)
+        self.distort = ColorJitter(0.5, 0.5, 0.5, 0.1)
 
     @staticmethod
     def view_as_blocks(tensor, block_shape):
-        assert tensor.dim() == 4
-
         return (tensor
                 .unfold(2, block_shape[0], block_shape[0])
                 .unfold(3, block_shape[1], block_shape[1])
                 .reshape(-1, tensor.shape[1], *block_shape))
 
     def create_patches(self, batch):
-        height, width = batch["gt"].shape[:2]
+        _, _, height, width = batch["gt"].shape
 
         # Crop the rest of the frames
         height -= height % self.patch_shape[0]
@@ -119,10 +121,10 @@ class TrainDeepColorTransfer(pl.LightningModule):
         batch = {k: frame[indexes] for k, frame in batch.items()}
 
         # Apply uniformly sampled distortions
-        batch["target"] = self.distort((batch["gt"] * 255).long()) / 255
+        batch["target"] = self.distort(batch["gt"])
 
         # Run Deep Color Transfer
-        result = self.model(batch)
+        result = self.model.run_transfer(batch)
 
         # Calculate and log losses
         loss_mse = mse_loss(result, batch["gt"])
