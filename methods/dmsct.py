@@ -119,7 +119,7 @@ class TrainDeepColorTransfer(pl.LightningModule):
         batch = {k: frame[indexes] for k, frame in batch.items()}
 
         # Apply uniformly sampled distortions
-        batch["target"] = self.distort(batch["gt"])
+        batch["target"] = self.distort((batch["gt"] * 255).long()) / 255
 
         # Run Deep Color Transfer
         result = self.model(batch)

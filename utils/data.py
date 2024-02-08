@@ -41,8 +41,8 @@ class PairDataset(Dataset):
         return torch.from_numpy(io.imread(path)).permute(2, 0, 1)
 
     def __getitem__(self, index):
-        gt = PairDataset.read_image(self.gts[index])
-        reference = PairDataset.read_image(self.references[index])
+        gt = PairDataset.read_image(self.gts[index]) / 255
+        reference = PairDataset.read_image(self.references[index]) / 255
 
         return {"gt": gt, "reference": reference}
 
@@ -59,9 +59,9 @@ class TestDataset(PairDataset):
     def __getitem__(self, index):
         return_dict = super().__getitem__(index // len(self.distortion_fns))
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
-        return_dict["target"] = distortion_fn(return_dict["gt"])
+        return_dict["target"] = distortion_fn((return_dict["gt"] * 255).long()) / 255
 
-        return {k: v / 255 for k, v in return_dict.items()}
+        return return_dict
 
 
 class DataModule(LightningDataModule):
