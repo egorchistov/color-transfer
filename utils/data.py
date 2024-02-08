@@ -65,23 +65,24 @@ class TestDataset(PairDataset):
 
 
 class DataModule(LightningDataModule):
-    def __init__(self, data_dir, num_workers=0):
+    def __init__(self, data_dir, batch_size, num_workers=0):
         super().__init__()
 
         self.data_dir = Path(data_dir)
+        self.batch_size = batch_size
         self.num_workers = num_workers
 
     def train_dataloader(self):
         dataset = PairDataset(self.data_dir / "Train")
 
-        return DataLoader(dataset, shuffle=True, num_workers=self.num_workers)
+        return DataLoader(dataset, self.batch_size, shuffle=True, num_workers=self.num_workers)
 
     def val_dataloader(self):
         dataset = PairDataset(self.data_dir / "Validation")
 
-        return DataLoader(dataset, num_workers=self.num_workers)
+        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
         dataset = TestDataset(self.data_dir / "Test")
 
-        return DataLoader(dataset, num_workers=self.num_workers)
+        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers)
