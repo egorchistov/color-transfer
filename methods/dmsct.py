@@ -117,7 +117,7 @@ class TrainDeepColorTransfer(pl.LightningModule):
         batch = self.create_patches(batch)
 
         # Select `batch_size` patches with the least confidence
-        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)))[:self.batch_size]
+        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)))[:min(self.batch_size, batch["gt"].shape[0])]
         batch = {k: frame[indexes] for k, frame in batch.items()}
 
         # Apply uniformly sampled distortions
