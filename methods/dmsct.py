@@ -4,137 +4,32 @@ import pytorch_lightning as pl
 from kornia.losses import ssim_loss
 from torch.nn.functional import mse_loss
 from piq import psnr, ssim
-from segmentation_models_pytorch.base import SegmentationHead
-from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
-from segmentation_models_pytorch.encoders import get_encoder
+from segmentation_models_pytorch import Unet
+from torchvision.transforms import ColorJitter
 
-from utils.visualizations import chess_mix, rgbmse, rgbssim
 from unimatch import GMFlow
 from unimatch.geometry import flow_warp
 
 
-class ConvGRU(torch.nn.Module):
-    """https://github.com/PeterL1n/RobustVideoMatting/blob/master/model/decoder.py"""
-    def __init__(self,
-                 channels: int,
-                 kernel_size: int = 3,
-                 padding: int = 1):
+class DeepColorTransfer(torch.nn.Module):
+    def __init__(self, max_hw=480 * 896):
         super().__init__()
-        self.channels = channels
-        self.ih = torch.nn.Sequential(
-            torch.nn.Conv2d(channels * 2, channels * 2, kernel_size, padding=padding),
-            torch.nn.Sigmoid()
-        )
-        self.hh = torch.nn.Sequential(
-            torch.nn.Conv2d(channels * 2, channels, kernel_size, padding=padding),
-            torch.nn.Tanh()
-        )
+        self.max_hw = max_hw
 
-    def forward_single_frame(self, x, h):
-        r, z = self.ih(torch.cat([x, h], dim=1)).split(self.channels, dim=1)
-        c = self.hh(torch.cat([x, r * h], dim=1))
-        h = (1 - z) * h + z * c
-        return h, h
-
-    def forward_time_series(self, x, h):
-        o = []
-        for xt in x.unbind(dim=1):
-            ot, h = self.forward_single_frame(xt, h)
-            o.append(ot)
-        o = torch.stack(o, dim=1)
-        return o, h
-
-    def forward(self, x, h=None):
-        if h is None:
-            h = torch.zeros((x.size(0), x.size(-3), x.size(-2), x.size(-1)),
-                            device=x.device, dtype=x.dtype)
-
-        if x.ndim == 5:
-            return self.forward_time_series(x, h)
-        else:
-            return self.forward_single_frame(x, h)
-
-
-class DMSCT(pl.LightningModule):
-    def __init__(self,
-                 encoder_name="efficientnet-b2",
-                 encoder_depth=4,
-                 encoder_weights=None,
-                 decoder_channels=(256, 128, 64, 32),
-                 use_gru=False,
-                 ):
-        super().__init__()
-        self.save_hyperparameters()
-
-        self.max_psnrs = {
-            "Training": 0,
-            "Validation": 0,
-            "Test": 0,
-        }
-
-        self.encoder = get_encoder(
-            name=self.hparams.encoder_name,
-            depth=self.hparams.encoder_depth,
-            weights=self.hparams.encoder_weights,
-        )
-
-        self.gmflow = GMFlow(pretrained="mixdata")
-        for p in self.gmflow.parameters():
+        self.matcher = GMFlow(pretrained="mixdata")
+        for p in self.matcher.parameters():
             p.requires_grad = False
 
-        encoder_out_channels = list(self.encoder.out_channels)
-        encoder_out_channels = [
-            2 * channels + 1
-            for channels in encoder_out_channels
-        ]
+        self.transfer = Unet(in_channels=7, classes=3)
 
-        self.decoder = UnetDecoder(
-            encoder_channels=encoder_out_channels,
-            decoder_channels=self.hparams.decoder_channels,
-            n_blocks=self.hparams.encoder_depth,
-            use_batchnorm=False,
-        )
+    @staticmethod
+    def derive_inference_size(shape, max_hw, padding_factor=32):
+        inference_size = [int(np.ceil(shape[-2] / padding_factor)) * padding_factor,
+                          int(np.ceil(shape[-1] / padding_factor)) * padding_factor]
 
-        if self.hparams.use_gru:
-            self.gru = ConvGRU(
-                channels=self.hparams.decoder_channels[-1],
-            )
+        aspect_ratio = shape[-1] / shape[-2]
 
-        self.head = SegmentationHead(
-            in_channels=self.hparams.decoder_channels[-1],
-            out_channels=3,
-        )
-
-    def forward(self, left, right, h=None):
-        is_video = left.ndim == 5
-
-        if is_video:
-            B, T, _, _, _ = left.shape
-
-            left = left.flatten(end_dim=1)
-            right = right.flatten(end_dim=1)
-
-        concat = torch.cat((left, right), dim=0)  # [2BT, C, H, W]
-        features = self.encoder(concat)  # list of [2BT, C, H, W], resolution from high to low
-
-        feature0, feature1 = [], []
-
-        for i in range(len(features)):
-            feature = features[i]
-            chunks = torch.chunk(feature, 2, 0)  # tuple
-            feature0.append(chunks[0])
-            feature1.append(chunks[1])
-
-        features_left = feature0
-        features_right = feature1
-
-        padding_factor = 32
-        inference_size = [int(np.ceil(left.shape[-2] / padding_factor)) * padding_factor,
-                          int(np.ceil(left.shape[-1] / padding_factor)) * padding_factor]
-
-        aspect_ratio = left.shape[-1] / left.shape[-2]
-
-        max_h = np.floor(np.sqrt(500 * 900 / aspect_ratio))
+        max_h = np.floor(np.sqrt(max_hw / aspect_ratio))
         max_w = np.floor(max_h * aspect_ratio)
 
         max_inference_size = [int(np.ceil(max_h / padding_factor)) * padding_factor,
@@ -143,120 +38,112 @@ class DMSCT(pl.LightningModule):
         if inference_size[0] * inference_size[1] > max_inference_size[0] * max_inference_size[1]:
             inference_size = max_inference_size
 
-        with torch.no_grad():
-            out = self.gmflow(left * 255,
-                              right * 255,
-                              inference_size=inference_size,
-                              pred_bidir_flow=True,
-                              fwd_bwd_consistency_check=True,
-                              )
+        return inference_size
 
-        features = [
-            torch.cat([
-                feature_left,
-                flow_warp(feature_right, self.gmflow.upsample_flow(out["flow"], feature=None, bilinear=True, upsample_factor=2 ** -idx)),
-                torch.nn.functional.interpolate((1 - out["fwd_occ"]), mode="nearest", scale_factor=2 ** -idx)
-            ], dim=1)
-            for idx, (feature_left, feature_right) in enumerate(zip(
-                features_left,
-                features_right
-            ))
-        ]
+    @torch.no_grad()
+    def match_reference(self, batch, use_gt=False):
+        inference_size = DeepColorTransfer.derive_inference_size(batch["reference"].shape, self.max_hw)
 
-        decoder_output = self.decoder(*features)
+        matcher_dict = self.matcher(
+            batch["gt"] * 255 if use_gt else batch["target"] * 255,
+            batch["reference"] * 255,
+            inference_size=inference_size,
+            pred_bidir_flow=True,
+            fwd_bwd_consistency_check=True,
+        )
 
-        if is_video and self.hparams.use_gru:
-            decoder_output = decoder_output.unflatten(dim=0, sizes=(B, T))
-            decoder_output, h = self.gru(decoder_output, h)
-            decoder_output = decoder_output.flatten(end_dim=1)
+        batch["matched_reference"] = flow_warp(batch["reference"], matcher_dict["flow"])
+        batch["valid_mask"] = 1 - matcher_dict["fwd_occ"]
+        del batch["reference"]
 
-        cleft = self.head(decoder_output)
+        return batch
 
-        if is_video:
-            cleft = cleft.unflatten(dim=0, sizes=(B, T))
+    def forward(self, batch):
+        batch = DeepColorTransfer.match_reference(batch)
 
-        return left + cleft, h
+        features = torch.cat([
+            batch["target"],
+            batch["matched_reference"],
+            batch["valid_mask"],
+        ], dim=1)
 
-    def step(self, batch, prefix):
-        result, _ = self(batch["target"], batch["reference"])
+        return batch["target"] + self.transfer(features)
 
-        if batch["gt"].ndim == 5:
-            batch["gt"] = batch["gt"].flatten(end_dim=1)
-            result = result.flatten(end_dim=1)
 
-        loss_mse = mse_loss(result, batch["gt"])
-        loss_ssim = 0.1 * ssim_loss(result, batch["gt"], window_size=11)
+class TrainDeepColorTransfer(pl.LightningModule):
+    def __init__(self, batch_size, patch_shape):
+        super().__init__()
+        self.batch_size = batch_size
+        self.patch_shape = patch_shape
 
-        self.log(f"{prefix} MSE Loss", loss_mse)
-        self.log(f"{prefix} SSIM Loss", loss_ssim)
-        self.log(f"{prefix} PSNR", psnr(result.clamp(0, 1), batch["gt"]), prog_bar=True)
-        self.log(f"{prefix} SSIM", ssim(result.clamp(0, 1), batch["gt"]))  # noqa
+        self.model = DeepColorTransfer()
+        self.distort = ColorJitter(0.5, 0.5, 0.5, 0.5)
 
-        return loss_mse + loss_ssim
+    @staticmethod
+    def view_as_blocks(tensor, block_shape):
+        assert tensor.dim() == 4 and block_shape.dim() == 2
+
+        return (tensor
+                .unfold(2, block_shape[0], block_shape[0])
+                .unfold(3, block_shape[1], block_shape[1])
+                .reshape(-1, tensor.shape[1], *block_shape))
+
+    def create_patches(self, batch):
+        height, width = batch["gt"].shape[:2]
+
+        # Crop the rest of the frames
+        height -= height % self.patch_shape[0]
+        width -= width % self.patch_shape[1]
+
+        # Cut the frames into patches
+        batch = {
+            k: TrainDeepColorTransfer.view_as_blocks(frame[:, :, :height, :width], self.patch_shape)
+            for k, frame in batch.items()
+        }
+
+        return batch
 
     def training_step(self, batch, batch_idx):
         return self.step(batch, prefix="Training")
 
     def validation_step(self, batch, batch_idx):
-        self.step(batch, prefix="Validation")
+        return self.step(batch, prefix="Validation")
+
+    def step(self, batch, prefix):
+        # Create patches for `gt`, `matched_reference`, `valid_mask`
+        batch = DeepColorTransfer.match_reference(batch, use_gt=True)
+        batch = self.create_patches(batch)
+
+        # Select `batch_size` patches with the least confidence
+        indexes = np.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)))[:self.batch_size]
+        batch = {k: frame[indexes] for k, frame in batch.items()}
+
+        # Apply uniformly sampled distortions
+        batch["target"] = self.distort(batch["gt"])
+
+        # Run Deep Color Transfer
+        result = self.model(batch)
+
+        # Calculate and log losses
+        loss_mse = mse_loss(result, batch["gt"])
+        loss_ssim = 0.1 * ssim_loss(result, batch["gt"], window_size=11)
+        self.log(f"{prefix} MSE Loss", loss_mse)
+        self.log(f"{prefix} SSIM Loss", loss_ssim)
+
+        # Calculate and log metrics
+        result = result.clamp(0, 1)
+        self.log(f"{prefix} PSNR", psnr(result, batch["gt"]), prog_bar=True)
+        self.log(f"{prefix} SSIM", ssim(result, batch["gt"]))  # noqa
+
+        return loss_mse + loss_ssim
 
     def test_step(self, batch, batch_idx):
-        self.step(batch, prefix="Test")
+        # Run Deep Color Transfer
+        result = self(batch).clamp(0, 1)
 
-    def on_train_epoch_end(self):
-        super().on_train_epoch_end()
-
-        batch = next(iter(self.trainer.train_dataloader))
-
-        self.log_images(batch, prefix="Training")
-
-    def on_validation_epoch_end(self):
-        super().on_validation_epoch_end()
-
-        batch = next(iter(self.trainer.val_dataloaders))
-
-        self.log_images(batch, prefix="Validation")
-
-    def on_test_epoch_end(self):
-        super().on_test_epoch_end()
-
-        batch = next(iter(self.trainer.test_dataloaders))
-
-        self.log_images(batch, prefix="Test")
-
-    def log_images(self, batch, prefix):
-        if (hasattr(self.logger, "log_image") and
-                self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
-            self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
-
-            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
-
-            if batch["gt"].ndim == 5:
-                batch = {k: v[:, 0] for k, v in batch.items() if isinstance(v, torch.Tensor)}
-
-            result, _ = self(batch["target"], batch["reference"])
-            result = result.clamp(0, 1)
-
-            out = self.gmflow(batch["target"] * 255, batch["reference"] * 255,
-                              pred_bidir_flow=True,
-                              pred_flow_viz=True,
-                              fwd_bwd_consistency_check=True,
-                              )
-
-            flow_viz = torch.from_numpy(out["flow_viz"]) / 255
-            warped_right = flow_warp(batch["reference"], out["flow"])
-            occlusion_mask = out["fwd_occ"].squeeze().cpu().numpy() * 255
-
-            data = {
-                "Left Ground Truth/Corrected": chess_mix(batch["gt"], result),
-                "RGB MSE Error": rgbmse(batch["gt"], result),
-                "RGB SSIM Error": rgbssim(batch["gt"], result),
-                "Optical Flow": flow_viz,
-                "Warped Right": warped_right,
-            }
-
-            self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()),
-                                  masks=[None] * (len(data) - 1) + [{"Occlusions": {"mask_data": occlusion_mask, "class_labels": {255: "Occlusions"}}}])
+        # Calculate and log metrics
+        self.log("Test PSNR", psnr(result, batch["gt"]), prog_bar=True)
+        self.log("Test SSIM", ssim(result, batch["gt"]))  # noqa
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
