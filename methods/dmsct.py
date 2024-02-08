@@ -81,7 +81,7 @@ class TrainDeepColorTransfer(pl.LightningModule):
 
     @staticmethod
     def view_as_blocks(tensor, block_shape):
-        assert tensor.dim() == 4 and block_shape.dim() == 2
+        assert tensor.dim() == 4
 
         return (tensor
                 .unfold(2, block_shape[0], block_shape[0])
