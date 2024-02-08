@@ -111,7 +111,7 @@ class TrainDeepColorTransfer(pl.LightningModule):
 
     def step(self, batch, prefix):
         # Create patches for `gt`, `matched_reference`, `valid_mask`
-        batch = DeepColorTransfer.match_reference(batch, use_gt=True)
+        batch = self.model.match_reference(batch, use_gt=True)
         batch = self.create_patches(batch)
 
         # Select `batch_size` patches with the least confidence
