@@ -1,3 +1,5 @@
+import itertools
+
 import numpy as np
 import torch
 import pytorch_lightning as pl
@@ -5,10 +7,10 @@ from kornia.losses import ssim_loss
 from torch.nn.functional import mse_loss
 from piq import psnr, ssim
 from segmentation_models_pytorch import Unet
-from torchvision.transforms import ColorJitter
 
 from unimatch import GMFlow
 from unimatch.geometry import flow_warp
+from utils.data import get_distortions
 
 
 class DeepColorTransfer(torch.nn.Module):
@@ -81,7 +83,7 @@ class TrainDeepColorTransfer(pl.LightningModule):
         self.patch_shape = patch_shape
 
         self.model = DeepColorTransfer(*args, **kwargs)
-        self.distort = ColorJitter(0.5, 0.5, 0.5, 0.1)
+        self.distortion_fns = itertools.cycle(get_distortions())
 
     @staticmethod
     def view_as_blocks(tensor, block_shape):
@@ -115,8 +117,8 @@ class TrainDeepColorTransfer(pl.LightningModule):
         indexes = indexes[:min(self.n_patches, batch["gt"].shape[0])]
         batch = {k: frame[indexes] for k, frame in batch.items()}
 
-        # Apply uniformly sampled distortions
-        batch["target"] = torch.stack([self.distort(image) for image in batch["gt"]])
+        # Apply predefined distortions
+        batch["target"] = torch.stack([next(self.distortion_fns)(image) for image in batch["gt"]])
 
         # Run Deep Color Transfer
         result = self.model.run_transfer(batch)
