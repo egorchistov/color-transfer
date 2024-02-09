@@ -111,7 +111,7 @@ class TrainDeepColorTransfer(pl.LightningModule):
         batch = self.create_patches(batch)
 
         # Select `batch_size` patches with the most confidence
-        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)), descending=True)
+        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)))
         indexes = indexes[:min(self.n_patches, batch["gt"].shape[0])]
         batch = {k: frame[indexes] for k, frame in batch.items()}
 
