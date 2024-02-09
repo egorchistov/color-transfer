@@ -75,12 +75,12 @@ class DeepColorTransfer(torch.nn.Module):
 
 
 class TrainDeepColorTransfer(pl.LightningModule):
-    def __init__(self, batch_size, patch_shape):
+    def __init__(self, n_patches, patch_shape, *args, **kwargs):
         super().__init__()
-        self.batch_size = batch_size
+        self.n_patches = n_patches
         self.patch_shape = patch_shape
 
-        self.model = DeepColorTransfer()
+        self.model = DeepColorTransfer(*args, **kwargs)
         self.distort = ColorJitter(0.5, 0.5, 0.5, 0.1)
 
     @staticmethod
@@ -117,7 +117,7 @@ class TrainDeepColorTransfer(pl.LightningModule):
         batch = self.create_patches(batch)
 
         # Select `batch_size` patches with the least confidence
-        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)))[:min(self.batch_size, batch["gt"].shape[0])]
+        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)))[:min(self.n_patches, batch["gt"].shape[0])]
         batch = {k: frame[indexes] for k, frame in batch.items()}
 
         # Apply uniformly sampled distortions
