@@ -106,18 +106,13 @@ class TrainDeepColorTransfer(pl.LightningModule):
         return batch
 
     def training_step(self, batch, batch_idx):
-        return self.step(batch, prefix="Training")
-
-    def validation_step(self, batch, batch_idx):
-        return self.step(batch, prefix="Validation")
-
-    def step(self, batch, prefix):
         # Create patches for `gt`, `matched_reference`, `valid_mask`
         batch = self.model.match_reference(batch, use_gt=True)
         batch = self.create_patches(batch)
 
-        # Select `batch_size` patches with the least confidence
-        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)))[:min(self.n_patches, batch["gt"].shape[0])]
+        # Select `batch_size` patches with the most confidence
+        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)), descending=True)
+        indexes = indexes[:min(self.n_patches, batch["gt"].shape[0])]
         batch = {k: frame[indexes] for k, frame in batch.items()}
 
         # Apply uniformly sampled distortions
@@ -129,13 +124,13 @@ class TrainDeepColorTransfer(pl.LightningModule):
         # Calculate and log losses
         loss_mse = mse_loss(result, batch["gt"])
         loss_ssim = 0.1 * ssim_loss(result, batch["gt"], window_size=11)
-        self.log(f"{prefix} MSE Loss", loss_mse)
-        self.log(f"{prefix} SSIM Loss", loss_ssim)
+        self.log("Training MSE Loss", loss_mse)
+        self.log("Training SSIM Loss", loss_ssim)
 
         # Calculate and log metrics
         result = result.clamp(0, 1)
-        self.log(f"{prefix} PSNR", psnr(result, batch["gt"]), prog_bar=True)
-        self.log(f"{prefix} SSIM", ssim(result, batch["gt"]))  # noqa
+        self.log("Training PSNR", psnr(result, batch["gt"]), prog_bar=True)
+        self.log("Training SSIM", ssim(result, batch["gt"]))  # noqa
 
         return loss_mse + loss_ssim
 
