@@ -72,17 +72,30 @@ class DataModule(LightningDataModule):
         self.batch_size = batch_size
         self.num_workers = num_workers
 
+    @staticmethod
+    def collate_fn(batch):
+        min_height = min(item["gt"].shape[-2] for item in batch)
+        min_width = min(item["gt"].shape[-1] for item in batch)
+
+        return {
+            k: torch.stack([item[k][:, :min_height, :min_width] for item in batch])
+            for k in batch[0].keys()
+        }
+
     def train_dataloader(self):
         dataset = PairDataset(self.data_dir / "Train")
 
-        return DataLoader(dataset, self.batch_size, shuffle=True, num_workers=self.num_workers)
+        return DataLoader(dataset, self.batch_size, shuffle=True, num_workers=self.num_workers,
+                          collate_fn=DataModule.collate_fn)
 
     def val_dataloader(self):
         dataset = PairDataset(self.data_dir / "Validation")
 
-        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers)
+        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers,
+                          collate_fn=DataModule.collate_fn)
 
     def test_dataloader(self):
         dataset = TestDataset(self.data_dir / "Test")
 
-        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers)
+        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers,
+                          collate_fn=DataModule.collate_fn)
