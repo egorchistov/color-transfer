@@ -88,12 +88,6 @@ class DataModule(LightningDataModule):
         return DataLoader(dataset, self.batch_size, shuffle=True, num_workers=self.num_workers,
                           collate_fn=DataModule.collate_fn)
 
-    def val_dataloader(self):
-        dataset = PairDataset(self.data_dir / "Validation")
-
-        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers,
-                          collate_fn=DataModule.collate_fn)
-
     def test_dataloader(self):
         dataset = TestDataset(self.data_dir / "Test")
 
