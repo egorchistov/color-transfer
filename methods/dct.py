@@ -138,7 +138,7 @@ class TrainDeepColorTransfer(pl.LightningModule):
 
     def test_step(self, batch, batch_idx):
         # Run Deep Color Transfer
-        result = self(batch).clamp(0, 1)
+        result = self.model(batch).clamp(0, 1)
 
         # Calculate and log metrics
         self.log("Test PSNR", psnr(result, batch["gt"]), prog_bar=True)
