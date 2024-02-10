@@ -47,6 +47,22 @@ class PairDataset(Dataset):
         return {"gt": gt, "reference": reference}
 
 
+class TrainValDataset(PairDataset):
+    def __init__(self, image_dir, crop_size):
+        super().__init__(image_dir)
+
+        self.crop_size = crop_size
+        self.distortion_fns = get_distortions()
+
+    def __getitem__(self, index):
+        return_dict = {k: F.center_crop(v, self.crop_size)
+                       for k, v in super().__getitem__(index).items()}
+        distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
+        return_dict["target"] = distortion_fn(return_dict["gt"])
+
+        return return_dict
+
+
 class TestDataset(PairDataset):
     def __init__(self, image_dir):
         super().__init__(image_dir)
@@ -65,31 +81,25 @@ class TestDataset(PairDataset):
 
 
 class DataModule(LightningDataModule):
-    def __init__(self, data_dir, batch_size, num_workers=0):
+    def __init__(self, data_dir, crop_size, batch_size, num_workers):
         super().__init__()
 
         self.data_dir = Path(data_dir)
+        self.crop_size = crop_size
         self.batch_size = batch_size
         self.num_workers = num_workers
 
-    @staticmethod
-    def collate_fn(batch):
-        min_height = min(item["gt"].shape[-2] for item in batch)
-        min_width = min(item["gt"].shape[-1] for item in batch)
-
-        return {
-            k: torch.stack([item[k][:, :min_height, :min_width] for item in batch])
-            for k in batch[0].keys()
-        }
-
     def train_dataloader(self):
-        dataset = PairDataset(self.data_dir / "Train")
+        dataset = TrainValDataset(self.data_dir / "Train", self.crop_size)
 
-        return DataLoader(dataset, self.batch_size, shuffle=True, num_workers=self.num_workers,
-                          collate_fn=DataModule.collate_fn)
+        return DataLoader(dataset, self.batch_size, shuffle=True, num_workers=self.num_workers)
+
+    def val_dataloader(self):
+        dataset = TrainValDataset(self.data_dir / "Validation", self.crop_size)
+
+        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers)
 
     def test_dataloader(self):
         dataset = TestDataset(self.data_dir / "Test")
 
-        return DataLoader(dataset, self.batch_size, num_workers=self.num_workers,
-                          collate_fn=DataModule.collate_fn)
+        return DataLoader(dataset, num_workers=self.num_workers)

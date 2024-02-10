@@ -2,13 +2,12 @@ seed_everything: 42
 model:
   class_path: methods.dct.TrainDeepColorTransfer
   init_args:
-    n_patches: 64
-    patch_shape: [128, 128]
-    max_hw: 262144
+    max_hw: 131072
 data:
   class_path: utils.data.DataModule
   init_args:
     data_dir: Artificial Dataset
+    crop_size: [256, 512]
     batch_size: 8
     num_workers: 8
 trainer:
@@ -20,3 +19,6 @@ trainer:
       log_model: true
   callbacks:
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
+      init_args:
+        monitor: Validation PSNR
+        mode: max

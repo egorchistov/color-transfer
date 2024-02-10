@@ -1,5 +1,3 @@
-import itertools
-
 import numpy as np
 import torch
 import pytorch_lightning as pl
@@ -10,11 +8,10 @@ from segmentation_models_pytorch import Unet
 
 from unimatch import GMFlow
 from unimatch.geometry import flow_warp
-from utils.data import get_distortions
 
 
 class DeepColorTransfer(torch.nn.Module):
-    def __init__(self, max_hw=480 * 896):
+    def __init__(self, max_hw=512 * 1024):
         super().__init__()
         self.max_hw = max_hw
 
@@ -22,7 +19,14 @@ class DeepColorTransfer(torch.nn.Module):
         for p in self.matcher.parameters():
             p.requires_grad = False
 
-        self.transfer = Unet(in_channels=7, classes=3)
+        self.transfer = Unet(
+            encoder_name="efficientnet-b2",
+            encoder_depth=4,
+            encoder_weights=None,
+            decoder_channels=[256, 128, 64, 32],
+            in_channels=7,
+            classes=3,
+        )
 
     @staticmethod
     def derive_inference_size(shape, max_hw, padding_factor=32):
@@ -84,64 +88,33 @@ class DeepColorTransfer(torch.nn.Module):
 
 
 class TrainDeepColorTransfer(pl.LightningModule):
-    def __init__(self, n_patches, patch_shape, *args, **kwargs):
+    def __init__(self, *args, **kwargs):
         super().__init__()
-        self.n_patches = n_patches
-        self.patch_shape = patch_shape
 
         self.model = DeepColorTransfer(*args, **kwargs)
-        self.distortion_fns = itertools.cycle(get_distortions())
 
-    @staticmethod
-    def view_as_blocks(tensor, block_shape):
-        return (tensor
-                .unfold(2, block_shape[0], block_shape[0])
-                .unfold(3, block_shape[1], block_shape[1])
-                .reshape(-1, tensor.shape[1], *block_shape))
-
-    def create_patches(self, batch):
-        _, _, height, width = batch["gt"].shape
-
-        # Crop the rest of the frames
-        height -= height % self.patch_shape[0]
-        width -= width % self.patch_shape[1]
-
-        # Cut the frames into patches
-        batch = {
-            k: TrainDeepColorTransfer.view_as_blocks(frame[:, :, :height, :width], self.patch_shape)
-            for k, frame in batch.items()
-        }
-
-        return batch
-
-    def training_step(self, batch, batch_idx):
-        # Create patches for `gt`, `matched_reference`, `valid_mask`
-        batch = self.model.match_reference(batch, use_gt=True)
-        batch = self.create_patches(batch)
-
-        # Select `batch_size` patches with the most confidence
-        indexes = torch.argsort(batch["valid_mask"].mean(dim=(-1, -2, -3)))
-        indexes = indexes[:min(self.n_patches, batch["gt"].shape[0])]
-        batch = {k: frame[indexes] for k, frame in batch.items()}
-
-        # Apply predefined distortions
-        batch["target"] = torch.stack([next(self.distortion_fns)(image) for image in batch["gt"]])
-
+    def step(self, batch, prefix):
         # Run Deep Color Transfer
-        result = self.model.run_transfer(batch)
+        result = self.model(batch)
 
         # Calculate and log losses
         loss_mse = mse_loss(result, batch["gt"])
         loss_ssim = 0.1 * ssim_loss(result, batch["gt"], window_size=11)
-        self.log("Training MSE Loss", loss_mse)
-        self.log("Training SSIM Loss", loss_ssim)
+        self.log(f"{prefix} MSE Loss", loss_mse)
+        self.log(f"{prefix} SSIM Loss", loss_ssim)
 
         # Calculate and log metrics
         result = result.clamp(0, 1)
-        self.log("Training PSNR", psnr(result, batch["gt"]), prog_bar=True)
-        self.log("Training SSIM", ssim(result, batch["gt"]))  # noqa
+        self.log(f"{prefix} PSNR", psnr(result, batch["gt"]), prog_bar=True)
+        self.log(f"{prefix} SSIM", ssim(result, batch["gt"]))  # noqa
 
         return loss_mse + loss_ssim
+
+    def training_step(self, batch, batch_idx):
+        return self.step(batch, prefix="Training")
+
+    def validation_step(self, batch, batch_idx):
+        return self.step(batch, prefix="Validation")
 
     def test_step(self, batch, batch_idx):
         # Run Deep Color Transfer
