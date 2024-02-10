@@ -67,12 +67,14 @@ class DeepColorTransfer(torch.nn.Module):
             batch["valid_mask"],
         ], dim=1)
 
-        pad_size = [(features.shape[-2] % padding_factor != 0) * (padding_factor - features.shape[-2] % padding_factor),
-                    (features.shape[-1] % padding_factor != 0) * (padding_factor - features.shape[-1] % padding_factor)]
+        _, _, height, width = features.shape
 
-        features = pad(features, (0, pad_size[1], 0, pad_size[0]), mode="reflect")
+        pad_size = [(width % padding_factor != 0) * (padding_factor - width % padding_factor),
+                    (height % padding_factor != 0) * (padding_factor - height % padding_factor)]
 
-        return batch["target"] + self.transfer(features)
+        features = pad(features, (0, pad_size[0], 0, pad_size[1]), mode="reflect")
+
+        return batch["target"] + self.transfer(features)[:, :, :height, :width]
 
     def forward(self, batch):
         batch = self.match_reference(batch)
