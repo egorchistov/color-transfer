@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import pytorch_lightning as pl
 from kornia.losses import ssim_loss
-from torch.nn.functional import mse_loss
+from torch.nn.functional import mse_loss, pad
 from piq import psnr, ssim
 from segmentation_models_pytorch import Unet
 
@@ -60,12 +60,17 @@ class DeepColorTransfer(torch.nn.Module):
 
         return batch
 
-    def run_transfer(self, batch):
+    def run_transfer(self, batch, padding_factor=32):
         features = torch.cat([
             batch["target"],
             batch["matched_reference"],
             batch["valid_mask"],
         ], dim=1)
+
+        pad_size = [(features.shape[-2] % padding_factor != 0) * (padding_factor - features.shape[-2] % padding_factor),
+                    (features.shape[-1] % padding_factor != 0) * (padding_factor - features.shape[-1] % padding_factor)]
+
+        features = pad(features, (0, pad_size[1], 0, pad_size[0]), mode="reflect")
 
         return batch["target"] + self.transfer(features)
 
