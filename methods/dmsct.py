@@ -24,8 +24,8 @@ class DMSCT(pl.LightningModule):
         self.save_hyperparameters()
         self.max_scores = {}
 
-        self.matcher = GMFlow(pretrained="mixdata")
-        for p in self.matcher.parameters():
+        self.gmflow = GMFlow(pretrained="mixdata")
+        for p in self.gmflow.parameters():
             p.requires_grad = False
 
         self.encoder = get_encoder(
@@ -82,7 +82,7 @@ class DMSCT(pl.LightningModule):
         matcher_inference_size = DMSCT.derive_matcher_inference_size(reference.shape)
 
         with torch.no_grad():
-            matcher_dict = self.matcher(
+            matcher_dict = self.gmflow(
                 target * 255,
                 reference * 255,
                 inference_size=matcher_inference_size,
@@ -99,7 +99,7 @@ class DMSCT(pl.LightningModule):
         features = [
             torch.cat([
                 feature_target,
-                flow_warp(feature_reference, self.matcher.upsample_flow(matcher_dict["flow"], feature=None, bilinear=True, upsample_factor=2 ** -idx)),
+                flow_warp(feature_reference, self.gmflow.upsample_flow(matcher_dict["flow"], feature=None, bilinear=True, upsample_factor=2 ** -idx)),
                 torch.nn.functional.interpolate((1 - matcher_dict["fwd_occ"]), mode="nearest", scale_factor=2 ** -idx)
             ], dim=1)
             for idx, (feature_target, feature_reference) in enumerate(zip(
@@ -157,7 +157,7 @@ class DMSCT(pl.LightningModule):
 
             batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items()}
 
-            matcher_dict = self.matcher(
+            matcher_dict = self.gmflow(
                 batch["target"] * 255,
                 batch["reference"] * 255,
                 pred_bidir_flow=True,
