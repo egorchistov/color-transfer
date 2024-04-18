@@ -73,8 +73,8 @@ class DMSCT(pl.LightningModule):
     def derive_pad_size(self, shape):
         padding_factor = 2 ** self.hparams.encoder_depth
 
-        pad_size = [0, (shape[-2] % padding_factor != 0) * (padding_factor - shape[-2] % padding_factor),
-                    0, (shape[-1] % padding_factor != 0) * (padding_factor - shape[-1] % padding_factor)]
+        pad_size = [0, (shape[-1] % padding_factor != 0) * (padding_factor - shape[-1] % padding_factor),
+                    0, (shape[-2] % padding_factor != 0) * (padding_factor - shape[-2] % padding_factor)]
 
         return pad_size
 
@@ -97,13 +97,6 @@ class DMSCT(pl.LightningModule):
         matcher_dict["fwd_occ"] = torch.nn.functional.pad(matcher_dict["fwd_occ"], pad_size)
         features_target = self.encoder(torch.nn.functional.pad(target, pad_size))
         features_reference = self.encoder(torch.nn.functional.pad(reference, pad_size))
-
-        print(
-            matcher_dict["flow"].shape,
-            matcher_dict["fwd_occ"].shape,
-            features_target[0].shape,
-            features_reference[0].shape,
-        )
 
         features = [
             torch.cat([

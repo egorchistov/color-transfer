@@ -117,6 +117,5 @@ class DataModule(LightningDataModule):
     def test_dataloader(self):
         return torch.utils.data.DataLoader(
             dataset=TestDataset(self.data_dir / "Test"),
-            batch_size=self.batch_size,
             num_workers=self.num_workers,
         )
