@@ -101,8 +101,8 @@ class DMSCT(pl.LightningModule):
         print(
             matcher_dict["flow"].shape,
             matcher_dict["fwd_occ"].shape,
-            features_target.shape,
-            features_reference.shape,
+            features_target[0].shape,
+            features_reference[0].shape,
         )
 
         features = [
