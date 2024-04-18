@@ -98,6 +98,13 @@ class DMSCT(pl.LightningModule):
         features_target = self.encoder(torch.nn.functional.pad(target, pad_size))
         features_reference = self.encoder(torch.nn.functional.pad(reference, pad_size))
 
+        print(
+            matcher_dict["flow"].shape,
+            matcher_dict["fwd_occ"].shape,
+            features_target.shape,
+            features_reference.shape,
+        )
+
         features = [
             torch.cat([
                 feature_target,
