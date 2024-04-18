@@ -295,12 +295,7 @@ class DCMCS3DI(pl.LightningModule):
                  channels=64,
                  ):
         super().__init__()
-
-        self.max_psnrs = {
-            "Training": 0,
-            "Validation": 0,
-            "Test": 0,
-        }
+        self.max_scores = {}
 
         self.extraction = FeatureExtration(layers=extraction_layers, channels=channels)
         self.pam = PAB(channels=channels, weighted_shortcut=False)
@@ -367,32 +362,26 @@ class DCMCS3DI(pl.LightningModule):
         super().on_train_epoch_end()
 
         batch = next(iter(self.trainer.train_dataloader))
-
         self.log_images(batch, prefix="Training")
 
     def on_validation_epoch_end(self):
         super().on_validation_epoch_end()
 
         batch = next(iter(self.trainer.val_dataloaders))
-
         self.log_images(batch, prefix="Validation")
 
     def on_test_epoch_end(self):
         super().on_test_epoch_end()
 
         batch = next(iter(self.trainer.test_dataloaders))
-
         self.log_images(batch, prefix="Test")
 
     def log_images(self, batch, prefix):
         if (hasattr(self.logger, "log_image") and
-                self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
-            self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
+                self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_scores.get(prefix, 0)):
+            self.max_scores[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
 
-            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
-
-            if batch["gt"].ndim == 5:
-                batch = {k: v[:, 0] for k, v in batch.items() if isinstance(v, torch.Tensor)}
+            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items()}
 
             result, (att, _, valid_mask, warped_right) = self(batch["target"], batch["reference"])
             result = result.clamp(0, 1)
@@ -408,8 +397,21 @@ class DCMCS3DI(pl.LightningModule):
                 "Warped Right": warped_right,
             }
 
-            self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()),
-                                  masks=[None] * (len(data) - 1) + [{"Occlusions": {"mask_data": occlusion_mask, "class_labels": {255: "Occlusions"}}}])
+            mask = {"Occlusions": {"mask_data": occlusion_mask, "class_labels": {255: "Occlusions"}}}
+
+            self.logger.log_image(
+                key=f"{prefix} Images",
+                images=list(data.values()),
+                caption=list(data.keys()),
+                masks=[None] * (len(data) - 1) + [mask]
+            )
+
+            self.logger.log_image(
+                key=f"{prefix} Images",
+                images=list(data.values()),
+                caption=list(data.keys()),
+                masks=[None] * (len(data) - 1) + [mask]
+            )
 
     def configure_optimizers(self):
         optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)

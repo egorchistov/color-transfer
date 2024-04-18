@@ -13,74 +13,26 @@ from unimatch import GMFlow
 from unimatch.geometry import flow_warp
 
 
-class ConvGRU(torch.nn.Module):
-    """https://github.com/PeterL1n/RobustVideoMatting/blob/master/model/decoder.py"""
-    def __init__(self,
-                 channels: int,
-                 kernel_size: int = 3,
-                 padding: int = 1):
-        super().__init__()
-        self.channels = channels
-        self.ih = torch.nn.Sequential(
-            torch.nn.Conv2d(channels * 2, channels * 2, kernel_size, padding=padding),
-            torch.nn.Sigmoid()
-        )
-        self.hh = torch.nn.Sequential(
-            torch.nn.Conv2d(channels * 2, channels, kernel_size, padding=padding),
-            torch.nn.Tanh()
-        )
-
-    def forward_single_frame(self, x, h):
-        r, z = self.ih(torch.cat([x, h], dim=1)).split(self.channels, dim=1)
-        c = self.hh(torch.cat([x, r * h], dim=1))
-        h = (1 - z) * h + z * c
-        return h, h
-
-    def forward_time_series(self, x, h):
-        o = []
-        for xt in x.unbind(dim=1):
-            ot, h = self.forward_single_frame(xt, h)
-            o.append(ot)
-        o = torch.stack(o, dim=1)
-        return o, h
-
-    def forward(self, x, h=None):
-        if h is None:
-            h = torch.zeros((x.size(0), x.size(-3), x.size(-2), x.size(-1)),
-                            device=x.device, dtype=x.dtype)
-
-        if x.ndim == 5:
-            return self.forward_time_series(x, h)
-        else:
-            return self.forward_single_frame(x, h)
-
-
 class DMSCT(pl.LightningModule):
     def __init__(self,
                  encoder_name="efficientnet-b2",
                  encoder_depth=4,
                  encoder_weights=None,
                  decoder_channels=(256, 128, 64, 32),
-                 use_gru=False,
                  ):
         super().__init__()
         self.save_hyperparameters()
+        self.max_scores = {}
 
-        self.max_psnrs = {
-            "Training": 0,
-            "Validation": 0,
-            "Test": 0,
-        }
+        self.matcher = GMFlow(pretrained="mixdata")
+        for p in self.matcher.parameters():
+            p.requires_grad = False
 
         self.encoder = get_encoder(
             name=self.hparams.encoder_name,
             depth=self.hparams.encoder_depth,
             weights=self.hparams.encoder_weights,
         )
-
-        self.gmflow = GMFlow(pretrained="mixdata")
-        for p in self.gmflow.parameters():
-            p.requires_grad = False
 
         encoder_out_channels = list(self.encoder.out_channels)
         encoder_out_channels = [
@@ -95,46 +47,19 @@ class DMSCT(pl.LightningModule):
             use_batchnorm=False,
         )
 
-        if self.hparams.use_gru:
-            self.gru = ConvGRU(
-                channels=self.hparams.decoder_channels[-1],
-            )
-
         self.head = SegmentationHead(
             in_channels=self.hparams.decoder_channels[-1],
             out_channels=3,
         )
 
-    def forward(self, left, right, h=None):
-        is_video = left.ndim == 5
+    @staticmethod
+    def derive_matcher_inference_size(shape, max_area=500 * 900, padding_factor=32):
+        inference_size = [int(np.ceil(shape[-2] / padding_factor)) * padding_factor,
+                          int(np.ceil(shape[-1] / padding_factor)) * padding_factor]
 
-        if is_video:
-            B, T, _, _, _ = left.shape
+        aspect_ratio = shape[-1] / shape[-2]
 
-            left = left.flatten(end_dim=1)
-            right = right.flatten(end_dim=1)
-
-        concat = torch.cat((left, right), dim=0)  # [2BT, C, H, W]
-        features = self.encoder(concat)  # list of [2BT, C, H, W], resolution from high to low
-
-        feature0, feature1 = [], []
-
-        for i in range(len(features)):
-            feature = features[i]
-            chunks = torch.chunk(feature, 2, 0)  # tuple
-            feature0.append(chunks[0])
-            feature1.append(chunks[1])
-
-        features_left = feature0
-        features_right = feature1
-
-        padding_factor = 32
-        inference_size = [int(np.ceil(left.shape[-2] / padding_factor)) * padding_factor,
-                          int(np.ceil(left.shape[-1] / padding_factor)) * padding_factor]
-
-        aspect_ratio = left.shape[-1] / left.shape[-2]
-
-        max_h = np.floor(np.sqrt(500 * 900 / aspect_ratio))
+        max_h = np.floor(np.sqrt(max_area / aspect_ratio))
         max_w = np.floor(max_h * aspect_ratio)
 
         max_inference_size = [int(np.ceil(max_h / padding_factor)) * padding_factor,
@@ -143,46 +68,50 @@ class DMSCT(pl.LightningModule):
         if inference_size[0] * inference_size[1] > max_inference_size[0] * max_inference_size[1]:
             inference_size = max_inference_size
 
+        return inference_size
+
+    def derive_pad_size(self, shape):
+        padding_factor = 2 ** self.hparams.encoder_depth
+
+        pad_size = [0, (shape[-2] % padding_factor != 0) * (padding_factor - shape[-2] % padding_factor),
+                    0, (shape[-1] % padding_factor != 0) * (padding_factor - shape[-1] % padding_factor)]
+
+        return pad_size
+
+    def forward(self, target, reference):
+        matcher_inference_size = DMSCT.derive_matcher_inference_size(reference.shape)
+
         with torch.no_grad():
-            out = self.gmflow(left * 255,
-                              right * 255,
-                              inference_size=inference_size,
-                              pred_bidir_flow=True,
-                              fwd_bwd_consistency_check=True,
-                              )
+            matcher_dict = self.matcher(
+                target * 255,
+                reference * 255,
+                inference_size=matcher_inference_size,
+                pred_bidir_flow=True,
+                fwd_bwd_consistency_check=True,
+            )
+
+        _, _, height, width = reference.shape
+        pad_size = self.derive_pad_size(reference.shape)
+
+        features_target = self.encoder(torch.nn.functional.pad(target, pad_size))
+        features_reference = self.encoder(torch.nn.functional.pad(reference, pad_size))
 
         features = [
             torch.cat([
-                feature_left,
-                flow_warp(feature_right, self.gmflow.upsample_flow(out["flow"], feature=None, bilinear=True, upsample_factor=2 ** -idx)),
-                torch.nn.functional.interpolate((1 - out["fwd_occ"]), mode="nearest", scale_factor=2 ** -idx)
+                feature_target,
+                flow_warp(feature_reference, self.matcher.upsample_flow(matcher_dict["flow"], feature=None, bilinear=True, upsample_factor=2 ** -idx)),
+                torch.nn.functional.interpolate((1 - matcher_dict["fwd_occ"]), mode="nearest", scale_factor=2 ** -idx)
             ], dim=1)
-            for idx, (feature_left, feature_right) in enumerate(zip(
-                features_left,
-                features_right
+            for idx, (feature_target, feature_reference) in enumerate(zip(
+                features_target,
+                features_reference
             ))
         ]
 
-        decoder_output = self.decoder(*features)
-
-        if is_video and self.hparams.use_gru:
-            decoder_output = decoder_output.unflatten(dim=0, sizes=(B, T))
-            decoder_output, h = self.gru(decoder_output, h)
-            decoder_output = decoder_output.flatten(end_dim=1)
-
-        cleft = self.head(decoder_output)
-
-        if is_video:
-            cleft = cleft.unflatten(dim=0, sizes=(B, T))
-
-        return left + cleft, h
+        return target + self.head(self.decoder(*features))[:, :, :height, :width]
 
     def step(self, batch, prefix):
-        result, _ = self(batch["target"], batch["reference"])
-
-        if batch["gt"].ndim == 5:
-            batch["gt"] = batch["gt"].flatten(end_dim=1)
-            result = result.flatten(end_dim=1)
+        result = self(batch["target"], batch["reference"])
 
         loss_mse = mse_loss(result, batch["gt"])
         loss_ssim = 0.1 * ssim_loss(result, batch["gt"], window_size=11)
@@ -207,45 +136,40 @@ class DMSCT(pl.LightningModule):
         super().on_train_epoch_end()
 
         batch = next(iter(self.trainer.train_dataloader))
-
         self.log_images(batch, prefix="Training")
 
     def on_validation_epoch_end(self):
         super().on_validation_epoch_end()
 
         batch = next(iter(self.trainer.val_dataloaders))
-
         self.log_images(batch, prefix="Validation")
 
     def on_test_epoch_end(self):
         super().on_test_epoch_end()
 
         batch = next(iter(self.trainer.test_dataloaders))
-
         self.log_images(batch, prefix="Test")
 
     def log_images(self, batch, prefix):
         if (hasattr(self.logger, "log_image") and
-                self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_psnrs[prefix]):
-            self.max_psnrs[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
+                self.trainer.logged_metrics[f"{prefix} PSNR"] > self.max_scores.get(prefix, 0)):
+            self.max_scores[prefix] = self.trainer.logged_metrics[f"{prefix} PSNR"]
 
-            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items() if isinstance(v, torch.Tensor)}
+            batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items()}
 
-            if batch["gt"].ndim == 5:
-                batch = {k: v[:, 0] for k, v in batch.items() if isinstance(v, torch.Tensor)}
+            matcher_dict = self.matcher(
+                batch["target"] * 255,
+                batch["reference"] * 255,
+                pred_bidir_flow=True,
+                pred_flow_viz=True,
+                fwd_bwd_consistency_check=True,
+            )
 
-            result, _ = self(batch["target"], batch["reference"])
-            result = result.clamp(0, 1)
+            flow_viz = torch.from_numpy(matcher_dict["flow_viz"]) / 255
+            warped_right = flow_warp(batch["reference"], matcher_dict["flow"])
+            occlusion_mask = matcher_dict["fwd_occ"].squeeze().cpu().numpy() * 255
 
-            out = self.gmflow(batch["target"] * 255, batch["reference"] * 255,
-                              pred_bidir_flow=True,
-                              pred_flow_viz=True,
-                              fwd_bwd_consistency_check=True,
-                              )
-
-            flow_viz = torch.from_numpy(out["flow_viz"]) / 255
-            warped_right = flow_warp(batch["reference"], out["flow"])
-            occlusion_mask = out["fwd_occ"].squeeze().cpu().numpy() * 255
+            result = self(batch["target"], batch["reference"]).clamp(0, 1)
 
             data = {
                 "Left Ground Truth/Corrected": chess_mix(batch["gt"], result),
@@ -255,8 +179,14 @@ class DMSCT(pl.LightningModule):
                 "Warped Right": warped_right,
             }
 
-            self.logger.log_image(key=f"{prefix} Images", images=list(data.values()), caption=list(data.keys()),
-                                  masks=[None] * (len(data) - 1) + [{"Occlusions": {"mask_data": occlusion_mask, "class_labels": {255: "Occlusions"}}}])
+            mask = {"Occlusions": {"mask_data": occlusion_mask, "class_labels": {255: "Occlusions"}}}
+
+            self.logger.log_image(
+                key=f"{prefix} Images",
+                images=list(data.values()),
+                caption=list(data.keys()),
+                masks=[None] * (len(data) - 1) + [mask]
+            )
 
     def configure_optimizers(self):
         optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
