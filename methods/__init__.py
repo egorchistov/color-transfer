@@ -2,7 +2,9 @@ import importlib
 
 import torch
 import pytorch_lightning as pl
-from piq import psnr, ssim
+from piq import psnr, ssim, fsim
+
+from utils.icid import icid
 
 
 class Runner(pl.LightningModule):
@@ -29,6 +31,10 @@ class Runner(pl.LightningModule):
 
         psnr_value = psnr(result, batch["gt"])
         ssim_value = ssim(result, batch["gt"])
+        fsim_value = fsim(result, batch["gt"])
+        icid_value = icid(result, batch["gt"])
 
         self.log("Test PSNR", psnr_value, prog_bar=True)
         self.log("Test SSIM", ssim_value)  # noqa
+        self.log("Test FSIM", fsim_value)
+        self.log("Test iCID", icid_value)

@@ -20,9 +20,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import pytorch_lightning as pl
-from piq import psnr, ssim
+from piq import psnr, ssim, fsim
 from kornia.losses import ssim_loss
 
+from utils.icid import icid
 from utils.visualizations import chess_mix, rgbmse, rgbssim
 
 
@@ -337,8 +338,12 @@ class DCMCS3DI(pl.LightningModule):
         self.log(f"{prefix} Cycle Loss",  loss_cycle)
         self.log(f"{prefix} Smoothness Loss",  loss_smooth)
 
-        self.log(f"{prefix} PSNR", psnr(corrected_left.clamp(0, 1), batch["gt"]))
-        self.log(f"{prefix} SSIM", ssim(corrected_left.clamp(0, 1), batch["gt"]))  # noqa
+        corrected_left = corrected_left.clamp(0, 1)
+
+        self.log(f"{prefix} PSNR", psnr(corrected_left, batch["gt"]))
+        self.log(f"{prefix} SSIM", ssim(corrected_left, batch["gt"]))  # noqa
+        self.log(f"{prefix} FSIM", fsim(corrected_left, batch["gt"]))
+        self.log(f"{prefix} iCID", icid(corrected_left, batch["gt"]))
 
         return loss_l1 + loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
 

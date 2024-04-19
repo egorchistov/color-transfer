@@ -5,11 +5,12 @@ import torch
 import pytorch_lightning as pl
 from kornia.losses import ssim_loss
 from torch.nn.functional import mse_loss
-from piq import psnr, ssim
+from piq import psnr, ssim, fsim
 from segmentation_models_pytorch.base import SegmentationHead
 from segmentation_models_pytorch.decoders.unet.decoder import UnetDecoder
 from segmentation_models_pytorch.encoders import get_encoder
 
+from utils.icid import icid
 from utils.visualizations import chess_mix, rgbmse, rgbssim
 from unimatch import GMFlow
 from unimatch.geometry import flow_warp
@@ -120,10 +121,14 @@ class DMSCT(pl.LightningModule):
         loss_mse = mse_loss(result, batch["gt"])
         loss_ssim = 0.1 * ssim_loss(result, batch["gt"], window_size=11)
 
+        result = result.clamp(0, 1)
+
         self.log(f"{prefix} MSE Loss", loss_mse)
         self.log(f"{prefix} SSIM Loss", loss_ssim)
-        self.log(f"{prefix} PSNR", psnr(result.clamp(0, 1), batch["gt"]), prog_bar=True)
-        self.log(f"{prefix} SSIM", ssim(result.clamp(0, 1), batch["gt"]))  # noqa
+        self.log(f"{prefix} PSNR", psnr(result, batch["gt"]), prog_bar=True)
+        self.log(f"{prefix} SSIM", ssim(result, batch["gt"]))  # noqa
+        self.log(f"{prefix} FSIM", fsim(result, batch["gt"]))
+        self.log(f"{prefix} iCID", icid(result, batch["gt"]))
 
         return loss_mse + loss_ssim
 
