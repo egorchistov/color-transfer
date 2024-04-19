@@ -1,0 +1,10 @@
+model:
+  class_path: methods.Runner
+  init_args:
+    # You can replace func spec to use different methods
+    func_spec: methods.linear.color_transfer_between_images
+data:
+  class_path: utils.data.DataModule
+  init_args:
+    data_dir: Artificial Dataset
+    num_workers: 0

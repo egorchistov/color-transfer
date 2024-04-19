@@ -1,3 +1,5 @@
+"""Deep Multi-Scale Color Transfer"""
+
 import numpy as np
 import torch
 import pytorch_lightning as pl
@@ -93,10 +95,10 @@ class DMSCT(pl.LightningModule):
         _, _, height, width = reference.shape
         pad_size = self.derive_pad_size(reference.shape)
 
-        matcher_dict["flow"] = torch.nn.functional.pad(matcher_dict["flow"], pad_size)
-        matcher_dict["fwd_occ"] = torch.nn.functional.pad(matcher_dict["fwd_occ"], pad_size)
-        features_target = self.encoder(torch.nn.functional.pad(target, pad_size))
-        features_reference = self.encoder(torch.nn.functional.pad(reference, pad_size))
+        matcher_dict["flow"] = torch.nn.functional.pad(matcher_dict["flow"], pad_size, mode="replicate")
+        matcher_dict["fwd_occ"] = torch.nn.functional.pad(matcher_dict["fwd_occ"], pad_size, mode="replicate")
+        features_target = self.encoder(torch.nn.functional.pad(target, pad_size, mode="replicate"))
+        features_reference = self.encoder(torch.nn.functional.pad(reference, pad_size, mode="replicate"))
 
         features = [
             torch.cat([
