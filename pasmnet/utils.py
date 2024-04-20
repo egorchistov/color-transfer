@@ -125,12 +125,3 @@ def warp(image, att):
     image = image.permute(0, 3, 1, 2)
 
     return image
-
-
-def interpolate_cost(costs, size):
-    size = [size[-2], size[-1], size[-1]]
-
-    return (
-        F.interpolate(costs[0].unsqueeze(dim=1), size=size, mode="trilinear", align_corners=True).squeeze(dim=1),
-        F.interpolate(costs[1].unsqueeze(dim=1), size=size, mode="trilinear", align_corners=True).squeeze(dim=1)
-    )
