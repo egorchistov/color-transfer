@@ -5,7 +5,7 @@ import torch
 import torch.nn.functional as F
 
 
-def output(costs):
+def output(costs, inference=False):
     """Apply masked softmax to cost volumes and return matching attention
     maps and valid masks
 
@@ -13,6 +13,8 @@ def output(costs):
     ----------
     costs : a pair of two (B, H, W, W) tensors
         Matching costs: cost_right2left, cost_left2righ
+    inference : bool
+        Compute only att_right2left and valid_mask_left at inference to reduce memory usage
 
     Returns
     -------
@@ -23,7 +25,6 @@ def output(costs):
     valid_masks : a pair of two (B, 1, H, W) tensors
         Matching valid masks: valid_mask_left, valid_mask_right
     """
-
     cost_right2left, cost_left2right = costs
 
     att_right2left = F.softmax(cost_right2left, dim=-1)
@@ -32,6 +33,11 @@ def output(costs):
     # valid mask (left image)
     valid_mask_left = torch.sum(att_left2right.detach(), dim=-2) > 0.1
     valid_mask_left = valid_mask_left.unsqueeze(dim=1)
+
+    if inference:
+        return (att_right2left, att_left2right), \
+            (None, None), \
+            (valid_mask_left, None)
 
     # valid mask (right image)
     valid_mask_right = torch.sum(att_right2left.detach(), dim=-2) > 0.1

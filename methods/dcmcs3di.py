@@ -11,7 +11,6 @@ Citation
   organization={IEEE}
 }
 """
-import numpy as np
 import torch
 import torch.nn.functional as F
 
@@ -22,7 +21,7 @@ from kornia.losses import ssim_loss
 from pasmnet.attention import PAB
 from pasmnet.backbone import ResB
 from pasmnet.losses import loss_pam_photometric, loss_pam_cycle, loss_pam_smoothness
-from pasmnet.utils import warp, output, regress_disp, interpolate_cost
+from pasmnet.utils import warp, output, regress_disp
 from utils.icid import icid
 from utils.visualizations import chess_mix, rgbmse, rgbssim
 
@@ -51,34 +50,11 @@ class DCMCS3DI(pl.LightningModule):
         self.transfer.append(torch.nn.Conv2d(channels, channels // 2, kernel_size=3, padding=1))
         self.transfer.append(torch.nn.Conv2d(channels // 2, 3, kernel_size=3, padding=1))
 
-    @staticmethod
-    def derive_matcher_inference_size(shape, max_area=500 * 900):
-        inference_size = [shape[-2], shape[-1]]
-
-        aspect_ratio = shape[-1] / shape[-2]
-
-        max_h = int(np.floor(np.sqrt(max_area / aspect_ratio)))
-        max_w = int(np.floor(max_h * aspect_ratio))
-
-        max_inference_size = [max_h, max_w]
-
-        if inference_size[0] * inference_size[1] > max_inference_size[0] * max_inference_size[1]:
-            inference_size = max_inference_size
-
-        return inference_size
-
-    def forward(self, left, right):
-        matcher_inference_size = DCMCS3DI.derive_matcher_inference_size(right.shape)
-
+    def forward(self, left, right, inference=False):
         fea_left = self.extraction(left)
         fea_right = self.extraction(right)
 
-        cost = interpolate_cost(self.matcher(
-            F.interpolate(fea_left, matcher_inference_size, mode="bilinear", align_corners=True),
-            F.interpolate(fea_right, matcher_inference_size, mode="bilinear", align_corners=True)
-        ), right.shape)
-
-        att, att_cycle, valid_mask = output(cost)
+        att, att_cycle, valid_mask = output(self.matcher(fea_left, fea_right), inference)
         fea_warped_right = warp(self.matcher.value(fea_right), att[0])
         corrected_left = self.transfer(torch.cat([fea_left, fea_warped_right, valid_mask[0]], dim=1))
 
@@ -124,7 +100,15 @@ class DCMCS3DI(pl.LightningModule):
         self.step(batch, prefix="Validation")
 
     def test_step(self, batch, batch_idx):
-        self.step(batch, prefix="Test")
+        prefix = "Test"
+
+        corrected_left, _ = self(batch["target"], batch["reference"], inference=True)
+        corrected_left = corrected_left.clamp(0, 1)
+
+        self.log(f"{prefix} PSNR", psnr(corrected_left, batch["gt"]), prog_bar=True)
+        self.log(f"{prefix} SSIM", ssim(corrected_left, batch["gt"]))  # noqa
+        self.log(f"{prefix} FSIM", fsim(corrected_left, batch["gt"]))
+        self.log(f"{prefix} iCID", icid(corrected_left, batch["gt"]))
 
     def on_train_epoch_end(self):
         super().on_train_epoch_end()
