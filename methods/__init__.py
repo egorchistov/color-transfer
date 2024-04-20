@@ -21,7 +21,7 @@ class Runner(pl.LightningModule):
             target = target.permute(1, 2, 0).detach().cpu().numpy()
             reference = reference.permute(1, 2, 0).detach().cpu().numpy()
 
-            output = torch.from_numpy(self.func(target, reference)).permute(2, 0, 1)
+            output = torch.from_numpy(self.func(target, reference)).float().permute(2, 0, 1)
             outputs.append(output)
 
         return torch.stack(outputs)
