@@ -57,8 +57,8 @@ class DCMCS3DI(pl.LightningModule):
 
         aspect_ratio = shape[-1] / shape[-2]
 
-        max_h = np.floor(np.sqrt(max_area / aspect_ratio))
-        max_w = np.floor(max_h * aspect_ratio)
+        max_h = int(np.floor(np.sqrt(max_area / aspect_ratio)))
+        max_w = int(np.floor(max_h * aspect_ratio))
 
         max_inference_size = [max_h, max_w]
 
