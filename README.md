@@ -82,8 +82,8 @@ Refer to [WandB](http://wandb.ai/egorchistov/color-transfer) for training histor
 Use these commands to start evaluation:
 
 ```shell
-python -m utils.cli test --config configs/dcmcs3di.yaml
-python -m utils.cli test --config configs/dmsct.yaml
+python -m utils.cli test --config configs/dcmcs3di.yaml --ckpt_path color-transfer/r9bydkqw/checkpoints/epoch\=96-step\=10185.ckpt --trainer.logger false
+python -m utils.cli test --config configs/dmsct.yaml --ckpt_path color-transfer/3qowm3x2/checkpoints/epoch\=72-step\=7665.ckpt --trainer.logger false
 python -m utils.cli test --config configs/others.yaml --model.func_spec "methods.linear.color_transfer_between_images"
 ```
 
