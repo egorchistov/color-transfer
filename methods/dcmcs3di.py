@@ -76,20 +76,20 @@ class DCMCS3DI(pl.LightningModule):
         loss_cycle = 0.005 * loss_pam_cycle(att_cycle, valid_mask)
         loss_smooth = 0.005 * loss_pam_smoothness(att)
 
-        self.log(f"{prefix} L1 Loss", loss_l1)
-        self.log(f"{prefix} MSE Loss", loss_mse)
-        self.log(f"{prefix} SSIM Loss", loss_ssim)
+        self.log(f"{prefix} L1 Loss", loss_l1, sync_dist=prefix != "Training")
+        self.log(f"{prefix} MSE Loss", loss_mse, sync_dist=prefix != "Training")
+        self.log(f"{prefix} SSIM Loss", loss_ssim, sync_dist=prefix != "Training")
 
-        self.log(f"{prefix} Photometric Loss", loss_pm)
-        self.log(f"{prefix} Cycle Loss",  loss_cycle)
-        self.log(f"{prefix} Smoothness Loss",  loss_smooth)
+        self.log(f"{prefix} Photometric Loss", loss_pm, sync_dist=prefix != "Training")
+        self.log(f"{prefix} Cycle Loss",  loss_cycle, sync_dist=prefix != "Training")
+        self.log(f"{prefix} Smoothness Loss",  loss_smooth, sync_dist=prefix != "Training")
 
         corrected_left = corrected_left.clamp(0, 1)
 
-        self.log(f"{prefix} PSNR", psnr(corrected_left, batch["gt"]), prog_bar=True)
-        self.log(f"{prefix} SSIM", ssim(corrected_left, batch["gt"]))  # noqa
-        self.log(f"{prefix} FSIM", fsim(corrected_left, batch["gt"]))
-        self.log(f"{prefix} iCID", icid(corrected_left, batch["gt"]))
+        self.log(f"{prefix} PSNR", psnr(corrected_left, batch["gt"]), sync_dist=prefix != "Training", prog_bar=True)
+        self.log(f"{prefix} SSIM", ssim(corrected_left, batch["gt"]), sync_dist=prefix != "Training")  # noqa
+        self.log(f"{prefix} FSIM", fsim(corrected_left, batch["gt"]), sync_dist=prefix != "Training")
+        self.log(f"{prefix} iCID", icid(corrected_left, batch["gt"]), sync_dist=prefix != "Training")
 
         return loss_l1 + loss_mse + loss_ssim + loss_pm + loss_cycle + loss_smooth
 
