@@ -33,24 +33,25 @@ def icid(
     downsampling=True,
 ):
     # Non-variable parameters
+    device = img1.device
     alpha = 3
     kernel_size = [11, 11]
     sigma = [2.0, 2.0]
 
     # Process parameters
     if intent == "perceptual":
-        weights = torch.tensor([0.002, 10, 10, 0.002, 0.002, 10, 10])
+        weights = torch.tensor([0.002, 10, 10, 0.002, 0.002, 10, 10], device=device)
     elif intent == "hue-preserving":
-        weights = torch.tensor([0.002, 10, 10, 0.002, 0.02, 10, 10])
+        weights = torch.tensor([0.002, 10, 10, 0.002, 0.02, 10, 10], device=device)
     elif intent == "chromatic":
-        weights = torch.tensor([0.002, 10, 10, 0.02, 0.02, 10, 10])
+        weights = torch.tensor([0.002, 10, 10, 0.02, 0.02, 10, 10], device=device)
     else:
         raise ValueError("Intent should be either 'perceptual', 'hue-preserving', or 'chromatic'")
 
     if omit_maps67:
-        exponents = torch.tensor([1, 1, alpha, 1, 1, 0, 0])
+        exponents = torch.tensor([1, 1, alpha, 1, 1, 0, 0], device=device)
     else:
-        exponents = torch.tensor([1, 1, alpha, 1, 1, 1, 1])
+        exponents = torch.tensor([1, 1, alpha, 1, 1, 1, 1], device=device)
 
     # TRANSFORM IMAGES TO THE WORKING COLOR SPACE
     # Here we use the almost perceptually uniform and hue linear LAB color space.
