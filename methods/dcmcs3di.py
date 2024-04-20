@@ -47,7 +47,7 @@ class DCMCS3DI(pl.LightningModule):
 
         self.transfer = torch.nn.Sequential(torch.nn.Conv2d(2 * channels + 1, channels, kernel_size=1))
         for _ in range(self.hparams.transfer_layers):
-            self.body.append(ResB(channels, channels))
+            self.transfer.append(ResB(channels, channels))
         self.transfer.append(torch.nn.Conv2d(channels, channels // 2, kernel_size=3, padding=1))
         self.transfer.append(torch.nn.Conv2d(channels // 2, 3, kernel_size=3, padding=1))
 

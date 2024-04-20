@@ -3,7 +3,7 @@
 
 import torch
 
-from backbone import ResB
+from pasmnet.backbone import ResB
 
 
 class PAB(torch.nn.Module):
