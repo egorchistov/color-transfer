@@ -87,7 +87,7 @@ def icid(
     muL1 = gaussian_blur(L1, kernel_size, sigma)
     muC1 = gaussian_blur(C1, kernel_size, sigma)
     muL2 = gaussian_blur(L2, kernel_size, sigma)
-    muC2 = gaussian_blur(C1, kernel_size, sigma)
+    muC2 = gaussian_blur(C2, kernel_size, sigma)
 
     # Standard deviation sigma
     sL1_sq = gaussian_blur(L1 ** 2, kernel_size, sigma) - muL1 ** 2
@@ -114,45 +114,35 @@ def icid(
     sC12 = gaussian_blur(C1 * C2, kernel_size, sigma) - muC1 * muC2
 
     # CALCULATE MAPS
-    shape = img1.shape[-2:]
-    maps_inv = torch.empty((7, *shape))
-    maps = torch.empty((7, *shape))
+    maps_inv = torch.stack([
+        # 1) Lightness difference
+        1 / (weights[0] * dL_sq + 1),
 
-    # 1) Lightness difference
-    maps_inv[0] = 1 / (weights[0] * dL_sq + 1)
-    maps[0] = 1 - maps_inv[0]
+        # 2) Lightness contrast
+        (weights[1] + 2 * sL1 * sL2) / (weights[1] + sL1_sq + sL2_sq),
 
-    # 2) Lightness contrast
-    maps_inv[1] = (weights[1] + 2 * sL1 * sL2) / (weights[1] + sL1_sq + sL2_sq)
-    maps[1] = 1 - maps_inv[1]
+        # 3) Lightness structure
+        (weights[2] + abs(sL12)) / (weights[2] + sL1 * sL2),
 
-    # 3) Lightness structure
-    maps_inv[2] = (weights[2] + abs(sL12)) / (weights[2] + sL1 * sL2)
-    maps[2] = 1 - maps_inv[2]
+        # 4) Chroma difference
+        1 / (weights[3] * dC_sq + 1),
 
-    # 4) Chroma difference
-    maps_inv[3] = 1 / (weights[3] * dC_sq + 1)
-    maps[3] = 1 - maps_inv[3]
+        # 5) Hue difference
+        1 / (weights[4] * dH_sq + 1),
 
-    # 5) Hue difference
-    maps_inv[4] = 1 / (weights[4] * dH_sq + 1)
-    maps[4] = 1 - maps_inv[4]
+        # 6) Chroma contrast
+        (weights[5] + 2 * sC1 * sC2) / (weights[5] + sC1 ** 2 + sC2 ** 2),
 
-    # 6) Chroma contrast
-    maps_inv[5] = (weights[5] + 2 * sC1 * sC2) / (weights[5] + sC1 ** 2 + sC2 ** 2)
-    maps[5] = 1 - maps_inv[5]
-
-    # 7) Chroma structure
-    maps_inv[6] = (weights[6] + torch.abs(sC12)) / (weights[6] + sC1 * sC2)
-    maps[6] = 1 - maps_inv[6]
+        # 7) Chroma structure
+        (weights[6] + torch.abs(sC12)) / (weights[6] + sC1 * sC2)
+    ], dim=1)
 
     # CALCULATE PREDICTION
     # Potentiate maps with exponents
-    for i in range(7):
-        maps_inv[i] = maps_inv[i] ** exponents[i]
+    maps_inv **= exponents[None, :, None, None]
 
     # Compute prediction pixel wise
-    prediction = 1 - torch.mean(torch.prod(maps_inv, dim=0))
+    prediction = 1 - torch.mean(torch.prod(maps_inv, dim=1))
 
     # Occasionally, the prediction has a very small imaginary part; we keep
     # only the real part of the prediction

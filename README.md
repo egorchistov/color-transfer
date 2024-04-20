@@ -84,8 +84,7 @@ Use these commands to start evaluation:
 ```shell
 python -m utils.cli test --config configs/dcmcs3di.yaml
 python -m utils.cli test --config configs/dmsct.yaml
-# And etc.
-python -m utils.cli test --config configs/runner.yaml --model.func_spec "methods.linear.color_transfer_between_images"
+python -m utils.cli test --config configs/others.yaml --model.func_spec "methods.linear.color_transfer_between_images"
 ```
 
 ## Citation
