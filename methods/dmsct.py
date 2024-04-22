@@ -27,8 +27,8 @@ class DMSCT(pl.LightningModule):
         self.save_hyperparameters()
         self.max_scores = {}
 
-        self.gmflow = GMFlow(pretrained="mixdata")
-        for p in self.gmflow.parameters():
+        self.matcher = GMFlow(pretrained="mixdata")
+        for p in self.matcher.parameters():
             p.requires_grad = False
 
         self.encoder = get_encoder(
@@ -85,7 +85,7 @@ class DMSCT(pl.LightningModule):
         matcher_inference_size = DMSCT.derive_matcher_inference_size(reference.shape)
 
         with torch.no_grad():
-            matcher_dict = self.gmflow(
+            matcher_dict = self.matcher(
                 target * 255,
                 reference * 255,
                 inference_size=matcher_inference_size,
@@ -104,7 +104,7 @@ class DMSCT(pl.LightningModule):
         features = [
             torch.cat([
                 feature_target,
-                flow_warp(feature_reference, self.gmflow.upsample_flow(matcher_dict["flow"], feature=None, bilinear=True, upsample_factor=2 ** -idx)),
+                flow_warp(feature_reference, self.matcher.upsample_flow(matcher_dict["flow"], feature=None, bilinear=True, upsample_factor=2 ** -idx)),
                 torch.nn.functional.interpolate((1 - matcher_dict["fwd_occ"]), mode="nearest", scale_factor=2 ** -idx)
             ], dim=1)
             for idx, (feature_target, feature_reference) in enumerate(zip(
@@ -123,12 +123,12 @@ class DMSCT(pl.LightningModule):
 
         result = result.clamp(0, 1)
 
-        self.log(f"{prefix} MSE Loss", loss_mse)
-        self.log(f"{prefix} SSIM Loss", loss_ssim)
-        self.log(f"{prefix} PSNR", psnr(result, batch["gt"]), prog_bar=True)
-        self.log(f"{prefix} SSIM", ssim(result, batch["gt"]))  # noqa
-        self.log(f"{prefix} FSIM", fsim(result, batch["gt"]))
-        self.log(f"{prefix} iCID", icid(result, batch["gt"]))
+        self.log(f"{prefix} MSE Loss", loss_mse, sync_dist=prefix != "Training")
+        self.log(f"{prefix} SSIM Loss", loss_ssim, sync_dist=prefix != "Training")
+        self.log(f"{prefix} PSNR", psnr(result, batch["gt"]), sync_dist=prefix != "Training", prog_bar=True)
+        self.log(f"{prefix} SSIM", ssim(result, batch["gt"]), sync_dist=prefix != "Training")  # noqa
+        self.log(f"{prefix} FSIM", fsim(result, batch["gt"]), sync_dist=prefix != "Training")
+        self.log(f"{prefix} iCID", icid(result, batch["gt"]), sync_dist=prefix != "Training")
 
         return loss_mse + loss_ssim
 
@@ -166,7 +166,7 @@ class DMSCT(pl.LightningModule):
 
             batch = {k: v[-1].unsqueeze(dim=0).to(self.device) for k, v in batch.items()}
 
-            matcher_dict = self.gmflow(
+            matcher_dict = self.matcher(
                 batch["target"] * 255,
                 batch["reference"] * 255,
                 pred_bidir_flow=True,
