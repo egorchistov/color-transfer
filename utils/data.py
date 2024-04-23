@@ -35,9 +35,6 @@ class Dataset(torch.utils.data.Dataset):
     def read_image(self, path: Path):
         frame = torch.from_numpy(io.imread(path)).permute(2, 0, 1)
 
-        if self.crop_size is not None:
-            frame = F.center_crop(frame, output_size=self.crop_size)
-
         return frame
 
     def __len__(self):
@@ -46,6 +43,21 @@ class Dataset(torch.utils.data.Dataset):
     def __getitem__(self, index):
         gt = self.read_image(self.gts[index // len(self.distortion_fns)])
         reference = self.read_image(self.references[index // len(self.distortion_fns)])
+
+        if self.crop_size is not None:
+            top = np.random.randint(0, gt.shape[-2] - self.crop_size[-2])
+            left = np.random.randint(0, gt.shape[-1] - self.crop_size[-1])
+
+            gt = F.crop(gt, top, left, *self.crop_size)
+            reference = F.crop(gt, top, left, *self.crop_size)
+
+            if np.random.random() > 0.5:
+                gt = F.hflip(gt)
+                reference = F.hflip(reference)
+
+            if np.random.random() > 0.5:
+                gt = F.vflip(gt)
+                reference = F.vflip(reference)
 
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
         target = distortion_fn(gt)
