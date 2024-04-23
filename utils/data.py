@@ -52,12 +52,11 @@ class Dataset(torch.utils.data.Dataset):
             reference = F.crop(gt, top, left, *self.crop_size)
 
             if np.random.random() > 0.5:
-                gt = F.hflip(gt)
-                reference = F.hflip(reference)
+                # After horizontal flip left view becomes right and vice versa
+                gt, reference = F.hflip(reference), F.hflip(gt)
 
             if np.random.random() > 0.5:
-                gt = F.vflip(gt)
-                reference = F.vflip(reference)
+                gt, reference = F.vflip(gt), F.vflip(reference)
 
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
         target = distortion_fn(gt)
