@@ -3,10 +3,10 @@ from functools import partial
 
 import torch
 import numpy as np
-from skimage import io
+import torchvision.transforms.functional as F
 from torch.utils import data
 from pytorch_lightning import LightningDataModule
-import torchvision.transforms.functional as F
+from torchvision.io import read_image
 
 
 def setup_distortions(max_magnitude=0.5, num=6):
@@ -23,26 +23,21 @@ def setup_distortions(max_magnitude=0.5, num=6):
 
 
 class Dataset(torch.utils.data.Dataset):
-    def __init__(self, image_dir, max_magnitude=0.5, crop_size=None):
+    def __init__(self, image_dir, crop_size=None):
         self.gts = sorted(image_dir.glob("*_L.*"))
         self.references = sorted(image_dir.glob("*_R.*"))
 
         assert len(self.gts) == len(self.references)
 
-        self.distortion_fns = setup_distortions(max_magnitude)
+        self.distortion_fns = setup_distortions()
         self.crop_size = crop_size
-
-    def read_image(self, path: Path):
-        frame = torch.from_numpy(io.imread(path)).permute(2, 0, 1)
-
-        return frame
 
     def __len__(self):
         return len(self.gts) * len(self.distortion_fns)
 
     def __getitem__(self, index):
-        gt = self.read_image(self.gts[index // len(self.distortion_fns)])
-        reference = self.read_image(self.references[index // len(self.distortion_fns)])
+        gt = read_image(str(self.gts[index // len(self.distortion_fns)]))
+        reference = read_image(str(self.references[index // len(self.distortion_fns)]))
 
         if self.crop_size is not None:
             top = np.random.randint(0, gt.shape[-2] - self.crop_size[-2])
@@ -65,12 +60,11 @@ class Dataset(torch.utils.data.Dataset):
 
 
 class DataModule(LightningDataModule):
-    def __init__(self, data_dir, crop_size, max_magnitude, batch_size, num_workers):
+    def __init__(self, data_dir, crop_size, batch_size, num_workers):
         super().__init__()
 
         self.data_dir = Path(data_dir)
         self.crop_size = crop_size
-        self.max_magnitude = max_magnitude
         self.batch_size = batch_size
         self.num_workers = num_workers
 
@@ -78,7 +72,6 @@ class DataModule(LightningDataModule):
         return torch.utils.data.DataLoader(
             dataset=Dataset(
                 image_dir=self.data_dir / "Train",
-                max_magnitude=self.max_magnitude,
                 crop_size=self.crop_size,
             ),
             batch_size=self.batch_size,
@@ -90,7 +83,6 @@ class DataModule(LightningDataModule):
         return torch.utils.data.DataLoader(
             dataset=Dataset(
                 image_dir=self.data_dir / "Validation",
-                max_magnitude=self.max_magnitude,
                 crop_size=self.crop_size,
             ),
             batch_size=self.batch_size,

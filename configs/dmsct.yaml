@@ -11,9 +11,8 @@ data:
   init_args:
     data_dir: Artificial Dataset
     crop_size: [256, 512]
-    max_magnitude: 0.5
-    batch_size: 8
-    num_workers: 8
+    batch_size: 12
+    num_workers: 12
 trainer:
   max_epochs: 100
   logger:

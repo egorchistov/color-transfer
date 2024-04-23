@@ -10,7 +10,6 @@ data:
   init_args:
     data_dir: Artificial Dataset
     crop_size: [160, 320]
-    max_magnitude: 0.5
     batch_size: 8
     num_workers: 8
 trainer:
