@@ -49,7 +49,7 @@ class Dataset(torch.utils.data.Dataset):
             left = np.random.randint(0, gt.shape[-1] - self.crop_size[-1])
 
             gt = F.crop(gt, top, left, *self.crop_size)
-            reference = F.crop(gt, top, left, *self.crop_size)
+            reference = F.crop(reference, top, left, *self.crop_size)
 
             if np.random.random() > 0.5:
                 # After horizontal flip left view becomes right and vice versa
