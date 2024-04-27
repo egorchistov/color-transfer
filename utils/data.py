@@ -56,7 +56,13 @@ class Dataset(torch.utils.data.Dataset):
         distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
         target = distortion_fn(gt)
 
-        return {"gt": gt / 255, "reference": reference / 255, "target": target / 255}
+        gt, reference, target = gt / 255, reference / 255, target / 255
+
+        if self.crop_size is not None:
+            target = torch.clamp(target + 0.07 * torch.randn_like(target), min=0, max=1)
+            reference = torch.clamp(reference + 0.01 * torch.randn_like(reference), min=0, max=1)
+
+        return {"gt": gt, "reference": reference, "target": target}
 
 
 class DataModule(LightningDataModule):

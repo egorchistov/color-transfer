@@ -113,15 +113,13 @@ class DMSCT(pl.LightningModule):
             ))
         ]
 
-        return target + self.head(self.decoder(*features))[:, :, :height, :width]
+        return torch.clamp(target + self.head(self.decoder(*features))[:, :, :height, :width], min=0, max=1)
 
     def step(self, batch, prefix):
         result = self(batch["target"], batch["reference"])
 
         loss_mse = mse_loss(result, batch["gt"])
         loss_ssim = 0.1 * ssim_loss(result, batch["gt"], window_size=11)
-
-        result = result.clamp(0, 1)
 
         self.log(f"{prefix} MSE Loss", loss_mse, sync_dist=prefix != "Training")
         self.log(f"{prefix} SSIM Loss", loss_ssim, sync_dist=prefix != "Training")
@@ -178,7 +176,7 @@ class DMSCT(pl.LightningModule):
             warped_right = flow_warp(batch["reference"], matcher_dict["flow"])
             occlusion_mask = matcher_dict["fwd_occ"].squeeze().cpu().numpy() * 255
 
-            result = self(batch["target"], batch["reference"]).clamp(0, 1)
+            result = self(batch["target"], batch["reference"])
 
             data = {
                 "Left Ground Truth/Corrected": chess_mix(batch["gt"], result),

@@ -10,9 +10,9 @@ data:
   class_path: utils.data.DataModule
   init_args:
     data_dir: Artificial Dataset
-    crop_size: [256, 512]
+    crop_size: [256, 480]
     batch_size: 12
-    num_workers: 12
+    num_workers: 32
 trainer:
   max_epochs: 100
   logger:
