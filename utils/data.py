@@ -7,6 +7,7 @@ import torchvision.transforms.functional as F
 from torch.utils import data
 from pytorch_lightning import LightningDataModule
 from torchvision.io import read_image
+from torchvision.transforms import ColorJitter
 
 
 def setup_distortions(max_magnitude=0.5, num=6):
@@ -29,15 +30,15 @@ class Dataset(torch.utils.data.Dataset):
 
         assert len(self.gts) == len(self.references)
 
-        self.distortion_fns = setup_distortions()
+        self.distortion_fn = ColorJitter(brightness=0.5, contrast=0.5, saturation=0.5, hue=0.5)
         self.crop_size = crop_size
 
     def __len__(self):
-        return len(self.gts) * len(self.distortion_fns)
+        return len(self.gts) * 31
 
     def __getitem__(self, index):
-        gt = read_image(str(self.gts[index // len(self.distortion_fns)]))
-        reference = read_image(str(self.references[index // len(self.distortion_fns)]))
+        gt = read_image(str(self.gts[index // 31]))
+        reference = read_image(str(self.references[index // 31]))
 
         if self.crop_size is not None:
             top = np.random.randint(0, gt.shape[-2] - self.crop_size[-2])
@@ -53,16 +54,9 @@ class Dataset(torch.utils.data.Dataset):
             if np.random.random() > 0.5:
                 gt, reference = F.vflip(gt), F.vflip(reference)
 
-        distortion_fn = self.distortion_fns[index % len(self.distortion_fns)]
-        target = distortion_fn(gt)
+        target = self.distortion_fn(gt)
 
-        gt, reference, target = gt / 255, reference / 255, target / 255
-
-        if self.crop_size is not None:
-            target = torch.clamp(target + 0.07 * torch.randn_like(target), min=0, max=1)
-            reference = torch.clamp(reference + 0.01 * torch.randn_like(reference), min=0, max=1)
-
-        return {"gt": gt, "reference": reference, "target": target}
+        return {"gt": gt / 255, "reference": reference / 255, "target": target / 255}
 
 
 class DataModule(LightningDataModule):
