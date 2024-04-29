@@ -99,7 +99,7 @@ class DCMCS3DI(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         self.step(batch, prefix="Validation")
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
         prefix = "Test"
 
         corrected_left, _ = self(batch["target"], batch["reference"], inference=True)

@@ -11,6 +11,7 @@ data:
   init_args:
     data_dir: Artificial Dataset
     crop_size: [256, 480]
+    image_repeats: 37
     batch_size: 12
     num_workers: 32
 trainer:

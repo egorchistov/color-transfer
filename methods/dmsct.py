@@ -136,7 +136,7 @@ class DMSCT(pl.LightningModule):
     def validation_step(self, batch, batch_idx):
         self.step(batch, prefix="Validation")
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
         self.step(batch, prefix="Test")
 
     def on_train_epoch_end(self):

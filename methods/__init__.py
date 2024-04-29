@@ -26,7 +26,7 @@ class Runner(pl.LightningModule):
 
         return torch.stack(outputs)
 
-    def test_step(self, batch, batch_idx):
+    def test_step(self, batch, batch_idx, dataloader_idx=0):
         result = self(batch).clamp(0, 1)
 
         psnr_value = psnr(result, batch["gt"])

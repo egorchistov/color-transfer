@@ -10,8 +10,9 @@ data:
   init_args:
     data_dir: Artificial Dataset
     crop_size: [160, 320]
+    image_repeats: 37
     batch_size: 8
-    num_workers: 8
+    num_workers: 32
 trainer:
   max_epochs: 100
   logger:
