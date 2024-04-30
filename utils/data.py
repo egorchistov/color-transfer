@@ -23,13 +23,14 @@ def setup_grid_distortions(max_magnitude=0.5, num=6):
 
 
 def apply_uniform_distortions(img, max_magnitude=0.5):
-    fn_idx = torch.randperm(5)
+    fn_idx = torch.randperm(6)
 
     brightness_factor = np.random.uniform(1 - max_magnitude, 1 + max_magnitude)
     contrast_factor = np.random.uniform(1 - max_magnitude, 1 + max_magnitude)
     saturation_factor = np.random.uniform(1 - max_magnitude, 1 + max_magnitude)
     hue_factor = np.random.uniform(-max_magnitude, max_magnitude)
     gamma = np.random.uniform(1 - max_magnitude, 1 + max_magnitude)
+    sharpness_factor = np.random.uniform(1 - max_magnitude, 1 + max_magnitude)
 
     for fn_id in fn_idx:
         if fn_id == 0:
@@ -42,6 +43,8 @@ def apply_uniform_distortions(img, max_magnitude=0.5):
             img = F.adjust_hue(img, hue_factor)
         elif fn_id == 4:
             img = F.adjust_gamma(img, gamma)
+        elif fn_id == 5:
+            img = F.adjust_sharpness(img, sharpness_factor)
 
     return img
 
