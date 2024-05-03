@@ -24,5 +24,5 @@ trainer:
   callbacks:
     - class_path: pytorch_lightning.callbacks.ModelCheckpoint
       init_args:
-        monitor: Validation PSNR
+        monitor: Validation PSNR/dataloader_idx_0
         mode: max
