@@ -148,7 +148,7 @@ class DataModule(LightningDataModule):
         )
 
     def val_dataloader(self):
-        return torch.utils.data.DataLoader(
+        artificial_dataloader = torch.utils.data.DataLoader(
             dataset=ArtificialTrainValDataset(
                 image_dir=self.data_dir / "Validation",
                 crop_size=self.crop_size,
@@ -157,6 +157,13 @@ class DataModule(LightningDataModule):
             batch_size=self.batch_size,
             num_workers=self.num_workers,
         )
+
+        realworld_dataloader = torch.utils.data.DataLoader(
+            dataset=RealWorldTestDataset(self.data_dir / "Real-World Test"),
+            num_workers=self.num_workers,
+        )
+
+        return [artificial_dataloader, realworld_dataloader]
 
     def test_dataloader(self):
         artificial_dataloader = torch.utils.data.DataLoader(

@@ -133,7 +133,7 @@ class DMSCT(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         return self.step(batch, prefix="Training")
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         self.step(batch, prefix="Validation")
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
@@ -144,18 +144,6 @@ class DMSCT(pl.LightningModule):
 
         batch = next(iter(self.trainer.train_dataloader))
         self.log_images(batch, prefix="Training")
-
-    def on_validation_epoch_end(self):
-        super().on_validation_epoch_end()
-
-        batch = next(iter(self.trainer.val_dataloaders))
-        self.log_images(batch, prefix="Validation")
-
-    def on_test_epoch_end(self):
-        super().on_test_epoch_end()
-
-        batch = next(iter(self.trainer.test_dataloaders))
-        self.log_images(batch, prefix="Test")
 
     def log_images(self, batch, prefix):
         if (hasattr(self.logger, "log_image") and
@@ -196,12 +184,4 @@ class DMSCT(pl.LightningModule):
             )
 
     def configure_optimizers(self):
-        optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
-            optimizer,
-            T_max=self.trainer.estimated_stepping_batches,
-            eta_min=1e-6)
-
-        lr_scheduler_dict = {"scheduler": scheduler, "interval": "step"}
-
-        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_dict}
+        return torch.optim.Adam(self.parameters(), lr=1e-4)

@@ -58,7 +58,7 @@ class DCMCS3DI(pl.LightningModule):
         fea_warped_right = warp(self.matcher.value(fea_right), att[0])
         corrected_left = self.transfer(torch.cat([fea_left, fea_warped_right, valid_mask[0]], dim=1))
 
-        return corrected_left, (
+        return corrected_left.clamp(min=0, max=1), (
             att,
             att_cycle,
             valid_mask,
@@ -84,8 +84,6 @@ class DCMCS3DI(pl.LightningModule):
         self.log(f"{prefix} Cycle Loss",  loss_cycle, sync_dist=prefix != "Training")
         self.log(f"{prefix} Smoothness Loss",  loss_smooth, sync_dist=prefix != "Training")
 
-        corrected_left = corrected_left.clamp(0, 1)
-
         self.log(f"{prefix} PSNR", psnr(corrected_left, batch["gt"]), sync_dist=prefix != "Training", prog_bar=True)
         self.log(f"{prefix} SSIM", ssim(corrected_left, batch["gt"]), sync_dist=prefix != "Training")  # noqa
         self.log(f"{prefix} FSIM", fsim(corrected_left, batch["gt"]), sync_dist=prefix != "Training")
@@ -96,14 +94,13 @@ class DCMCS3DI(pl.LightningModule):
     def training_step(self, batch, batch_idx):
         return self.step(batch, prefix="Training")
 
-    def validation_step(self, batch, batch_idx):
+    def validation_step(self, batch, batch_idx, dataloader_idx=0):
         self.step(batch, prefix="Validation")
 
     def test_step(self, batch, batch_idx, dataloader_idx=0):
         prefix = "Test"
 
         corrected_left, _ = self(batch["target"], batch["reference"], inference=True)
-        corrected_left = corrected_left.clamp(0, 1)
 
         self.log(f"{prefix} PSNR", psnr(corrected_left, batch["gt"]), prog_bar=True)
         self.log(f"{prefix} SSIM", ssim(corrected_left, batch["gt"]))  # noqa
@@ -115,12 +112,6 @@ class DCMCS3DI(pl.LightningModule):
 
         batch = next(iter(self.trainer.train_dataloader))
         self.log_images(batch, prefix="Training")
-
-    def on_validation_epoch_end(self):
-        super().on_validation_epoch_end()
-
-        batch = next(iter(self.trainer.val_dataloaders))
-        self.log_images(batch, prefix="Validation")
 
     def log_images(self, batch, prefix):
         if (hasattr(self.logger, "log_image") and
@@ -153,6 +144,4 @@ class DCMCS3DI(pl.LightningModule):
             )
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-4)
-
-        return {"optimizer": optimizer}
+        return torch.optim.Adam(self.parameters(), lr=1e-4)
