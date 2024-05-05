@@ -184,4 +184,12 @@ class DMSCT(pl.LightningModule):
             )
 
     def configure_optimizers(self):
-        return torch.optim.Adam(self.parameters(), lr=1e-4)
+        optimizer = torch.optim.AdamW(self.parameters(), lr=3e-4)
+        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(
+            optimizer,
+            T_max=self.trainer.estimated_stepping_batches,
+            eta_min=1e-6)
+
+        lr_scheduler_dict = {"scheduler": scheduler, "interval": "step"}
+
+        return {"optimizer": optimizer, "lr_scheduler": lr_scheduler_dict}
