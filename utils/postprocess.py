@@ -25,9 +25,10 @@ from methods.linear import monge_kantorovitch_color_transfer as mkct
 def parse_args():
     parser = argparse.ArgumentParser(description="Script for processing all samples")
     parser.add_argument("--root", type=str, required=True, help="Path to folder with all samples")
-    parser.add_argument("--samples", type=str, help="Samples to process", required=False)
     parser.add_argument("--output", type=str, required=True, help="Path to output folder to save processed samples")
-    parser.add_argument("--frames", type=int, default=50, help="How many frames select from each sample")
+    parser.add_argument("--samples", type=str, help="Comma separated list of samples to process", required=False)
+    parser.add_argument("--rate", type=int, default=10, help="Use each `rate` frame from sequences")
+    parser.add_argument("--frames", type=int, default=7, help="How many frames select from each sample")
 
     return parser.parse_args()
 
@@ -87,7 +88,7 @@ def frames(args, params, sample):
     cap_left_gt.set(cv2.CAP_PROP_POS_FRAMES, params["offsets"]["all"] + params["offsets"]["left_gt"])
     cap_right.set(cv2.CAP_PROP_POS_FRAMES, params["offsets"]["all"] + params["offsets"]["right"])
 
-    for frame_idx in range(args.frames):
+    for frame_idx in range(args.frames * args.rate):
         _, left = cap_left.read()
         _, left_gt = cap_left_gt.read()
         _, right = cap_right.read()
@@ -114,22 +115,18 @@ if __name__ == "__main__":
         with open(os.path.join(args.root, sample, "params.json"), "r") as f:
             params = json.load(f)
 
-        bbox = params["bbox"]
-        x, y, w, h = bbox["x"], bbox["y"], bbox["w"], bbox["h"]
+        x, y, w, h = params["bbox"]["x"], params["bbox"]["y"], params["bbox"]["w"], params["bbox"]["h"]
 
         for frame_idx, left, left_gt, right in frames(args, params, sample):
             if frame_idx == 0:
                 H1 = estimate_homography(left, left_gt)
                 H2 = estimate_homography(right, left_gt, method="LOFTR")
+            elif frame_idx % args.rate != 0:
+                continue
 
-                left_gt_crop = left_gt[y: y + h, x: x + w]
-                right_crop = cv2.warpPerspective(right, H2, (right.shape[1], right.shape[0]))
-                right_crop = right_crop[y: y + h, x: x + w]
-
-                H3 = estimate_homography(right_crop, left_gt_crop, method="LOFTR")
-                H3 = np.array([[1, 0, H3[0, 2]], [0, 1, 0], [0, 0, 1]])
-
-                H2 = H2 @ H3
+            left = left[y: y + h, x: x + w]
+            left_gt = left_gt[y: y + h, x: x + w]
+            right = right[y: y + h, x: x + w]
 
             left = cv2.warpPerspective(left, H1, (left.shape[1], left.shape[0]))
             right = cv2.warpPerspective(right, H2, (right.shape[1], right.shape[0]))
@@ -142,6 +139,6 @@ if __name__ == "__main__":
 
             os.makedirs(os.path.join(args.output, sample), exist_ok=True)
 
-            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx:04}_LD.png"), left)
-            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx:04}_L.png"), left_gt)
-            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx:04}_R.png"), right)
+            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx // args.rate:04}_LD.png"), left)
+            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx // args.rate:04}_L.png"), left_gt)
+            cv2.imwrite(os.path.join(args.output, sample, f"{frame_idx // args.rate:04}_R.png"), right)
