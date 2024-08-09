@@ -19,7 +19,7 @@ This repo contains **two datasets** and **six** color-transfer **methods**.
 
 ## What’s New
 
-* **Soooooon** We will update our paper
+* **08.08.2024** The arXiv v3 version has been published
 * **15.05.2024** We have updated the comparison methodology and improved our color-transfer method
 * **15.06.2023** We were not allowed to attend the EUSIPCO 2023 conference because of our affiliation
 * **15.06.2023** The arXiv v2 version has been updated with FSIM and iCID results
@@ -87,11 +87,11 @@ model used in methods’ development and the real-world distortion model.
 If you find our work useful, please cite the following paper:
 
 ```
-@article{chistov2023color,
+@article{chistov2024color,
   title={Color Mismatches in Stereoscopic Video: Real-World Dataset and Deep Correction Method},
-  author={Chistov, Egor and Alutis, Nikita and Velikanov, Maxim and Vatolin, Dmitriy},
+  author={Chistov, Egor and Alutis, Nikita and Vatolin, Dmitriy},
   howpublished={arXiv preprint arXiv:2303.06657},
-  year={2023}
+  year={2024}
 }
 ```
 
